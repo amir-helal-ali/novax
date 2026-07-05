@@ -14,6 +14,7 @@ pub use novax_auth::{
     build_auth_url, extract_bearer_token, generate_state,
 };
 pub use novax_macros::{entity, main, route};
+pub use novax_mail::{self, MailConfig, MailError, MailService};
 pub use novax_migrate::{self, Migration, MigrationError, MigrationReport, MigrationRunner};
 pub use novax_network;
 pub use novax_observability::{self, init_logging, system_health, HealthStatus, SystemHealth};

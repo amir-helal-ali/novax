@@ -1,6 +1,6 @@
-//! NovaX Example Application (v0.4)
+//! NovaX Example Application (v0.4.1)
 //!
-//! Full-featured: PostgreSQL + Auth + Rate Limiting + OAuth + Admin Dashboard
+//! Full-featured: PostgreSQL + Auth + Rate Limiting + OAuth + Mail + Admin Dashboard
 
 use novax::prelude::*;
 use tracing::{info, error};
@@ -24,6 +24,7 @@ async fn main() {
     let auth_config = AuthConfig::default();
     let rate_limit_config = RateLimitConfig::from_env();
     let oauth_config = OAuthConfig::default();
+    let mail_config = MailConfig::default();
 
     let is_dev = std::env::var("NOVAX_ENV")
         .map(|e| e == "development")
@@ -33,7 +34,8 @@ async fn main() {
         .with_database(db_config)
         .with_auth(auth_config)
         .with_rate_limiting(rate_limit_config)
-        .with_oauth(oauth_config);
+        .with_oauth(oauth_config)
+        .with_mail(mail_config);
 
     let app = if is_dev {
         app.dev_mode()

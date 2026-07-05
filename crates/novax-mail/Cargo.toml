@@ -1,16 +1,17 @@
 [package]
-name = "novax-web"
+name = "novax-mail"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "NovaX web UI: server-rendered HTML pages for auth + admin dashboard"
+description = "NovaX mail service: SMTP email sending for verification + password reset"
 repository.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
-once_cell = { workspace = true }
-novax-auth = { workspace = true }
-chrono = { workspace = true }
+tokio = { workspace = true }
+lettre = { workspace = true }

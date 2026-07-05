@@ -25,6 +25,7 @@ use novax_auth::{
     AuthService, AuthConfig, AuthUser, AuthError, extract_bearer_token,
     OAuthConfig, OAuthProvider, build_auth_url, generate_state,
 };
+use novax_mail::{MailConfig, MailService};
 use novax_network::{ServerConfig, serve, ServerError};
 use novax_rate_limit::{RateLimiter, RateLimitConfig, spawn_cleanup_task};
 use novax_router::{RouterConfig, with_defaults};
@@ -47,6 +48,8 @@ pub struct AppState {
     pub auth: Option<Arc<AuthService>>,
     pub rate_limiter: Option<RateLimiter>,
     pub oauth_config: Option<OAuthConfig>,
+    pub mail: Option<Arc<MailService>>,
+    pub http_client: Option<reqwest::Client>,
     pub dev_mode: bool,
 }
 
@@ -58,6 +61,7 @@ pub struct App {
     pub auth_config: Option<AuthConfig>,
     pub rate_limit_config: Option<RateLimitConfig>,
     pub oauth_config: Option<OAuthConfig>,
+    pub mail_config: Option<MailConfig>,
     pub dev_mode: bool,
 }
 
@@ -75,6 +79,8 @@ impl App {
             auth: None,
             rate_limiter: None,
             oauth_config: None,
+            mail: None,
+            http_client: None,
             dev_mode: false,
         };
         Self {
@@ -84,6 +90,7 @@ impl App {
             auth_config: None,
             rate_limit_config: None,
             oauth_config: None,
+            mail_config: None,
             dev_mode: false,
         }
     }
@@ -105,6 +112,11 @@ impl App {
 
     pub fn with_oauth(mut self, config: OAuthConfig) -> Self {
         self.oauth_config = Some(config);
+        self
+    }
+
+    pub fn with_mail(mut self, config: MailConfig) -> Self {
+        self.mail_config = Some(config);
         self
     }
 
@@ -139,10 +151,19 @@ impl App {
                 info!("Rate limiting initialized");
             }
 
+            // Initialize mail service
+            let mail_config = self.mail_config.take().unwrap_or_default();
+            let mail = MailService::new(mail_config);
+            self.state.mail = Some(Arc::new(mail));
+            info!("Mail service initialized");
+
+            // Initialize HTTP client (for OAuth)
+            self.state.http_client = Some(reqwest::Client::new());
+
             self.state.oauth_config = self.oauth_config.take();
             self.state.dev_mode = self.dev_mode;
 
-            info!("Database + Auth + Rate Limiting initialized successfully");
+            info!("Database + Auth + Rate Limiting + Mail initialized successfully");
         }
         Ok(self)
     }
@@ -227,7 +248,14 @@ fn build_router(state: AppState) -> Router {
             .route("/admin/users/:id/toggle-active", post(admin_toggle_active_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/users/:id/toggle-admin", post(admin_toggle_admin_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/settings", get(admin_settings_handler).post(admin_settings_form_handler).layer(from_fn_with_state(state.clone(), require_auth)))
-            .route("/admin/delete-user/:id", post(admin_delete_user_handler).layer(from_fn_with_state(state.clone(), require_auth)));
+            .route("/admin/delete-user/:id", post(admin_delete_user_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/users/:id/edit", get(admin_user_edit_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/users/:id/update", post(admin_user_update_handler).layer(from_fn_with_state(state.clone(), require_auth)));
+
+        // Profile page (for regular users — shows own profile)
+        router = router
+            .route("/profile", get(profile_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/profile/update", post(profile_update_handler).layer(from_fn_with_state(state.clone(), require_auth)));
 
         // Avatar upload (protected)
         router = router
@@ -482,11 +510,13 @@ async fn register_form_handler(
             // Generate email verification token
             let token_result = auth.create_email_verification_token(pool, user.id).await;
             let dev_token = if state.dev_mode {
-                token_result.ok()
+                token_result.as_ref().ok().cloned()
             } else {
-                // TODO: send email via SMTP
-                if let Err(e) = &token_result {
-                    warn!(error = %e, "Failed to create verification token");
+                // Send verification email via SMTP
+                if let (Ok(token), Some(mail)) = (&token_result, state.mail.as_ref()) {
+                    if let Err(e) = mail.send_verification_email(&user.email, &user.name, token).await {
+                        warn!(error = %e, "Failed to send verification email");
+                    }
                 }
                 None
             };
@@ -548,8 +578,20 @@ async fn forgot_password_form_handler(
                     link
                 ).into());
             }
-            // TODO: send via SMTP
-            info!(email = %form.email, "Password reset token generated (SMTP not configured)");
+            // Send password reset email via SMTP
+            if let Some(mail) = state.mail.as_ref() {
+                // Get user name for personalization
+                let user_name: Option<(String,)> = sqlx::query_as("SELECT name FROM users WHERE email = $1")
+                    .bind(&form.email)
+                    .fetch_optional(pool)
+                    .await
+                    .ok()
+                    .flatten();
+                let name = user_name.map(|(n,)| n).unwrap_or_else(|| "User".to_string());
+                if let Err(e) = mail.send_password_reset_email(&form.email, &name, &token).await {
+                    warn!(error = %e, "Failed to send password reset email");
+                }
+            }
         }
     }
     Html(forgot_password_page(None, true))
@@ -682,18 +724,247 @@ struct OAuthCallbackQuery {
 
 async fn oauth_callback_handler(
     State(state): State<AppState>,
-    Path(provider): Path<String>,
+    Path(provider_str): Path<String>,
     Query(params): Query<OAuthCallbackQuery>,
 ) -> Response {
-    // For v0.4: OAuth callback is a scaffold — full implementation (token exchange +
-    // user info fetch + create/link user) requires an HTTP client crate like reqwest.
-    // For now, show a notice that OAuth is configured but needs final wiring.
-    let _ = (provider, params, state);
-    Html(r#"<div class="auth-page"><div class="auth-card" style="text-align: center;">
-        <h1 class="auth-title">OAuth قيد التطوير</h1>
-        <p class="auth-subtitle">تم استلام الـ callback بنجاح. تبادل الـ token سيُكمل في v0.4.1.</p>
-        <a href="/auth/login" class="btn btn-primary">العودة لتسجيل الدخول</a>
-    </div></div>"#.to_string()).into_response()
+    let provider = match OAuthProvider::from_str(&provider_str) {
+        Some(p) => p,
+        None => return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">خطأ</h1><p class="auth-subtitle">مزود OAuth غير معروف</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response(),
+    };
+
+    // Check for OAuth error
+    if let Some(err) = &params.error {
+        let msg = format!("OAuth error: {}", err);
+        return Html(format!(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل OAuth</h1><p class="auth-subtitle">{}</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#, msg)).into_response();
+    }
+
+    let oauth_config = match state.oauth_config.as_ref() {
+        Some(c) => c,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "OAuth not configured").into_response(),
+    };
+
+    let provider_config = match provider {
+        OAuthProvider::Google => oauth_config.google.as_ref(),
+        OAuthProvider::Github => oauth_config.github.as_ref(),
+    };
+
+    let Some(provider_config) = provider_config else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "Provider not configured").into_response();
+    };
+
+    let http_client = match state.http_client.as_ref() {
+        Some(c) => c,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "HTTP client not available").into_response(),
+    };
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let auth = match state.auth.as_ref() {
+        Some(a) => a,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "Auth not configured").into_response(),
+    };
+
+    // Step 1: Exchange code for access token
+    let redirect_uri = format!(
+        "{}/auth/oauth/{}/callback",
+        oauth_config.redirect_base.trim_end_matches('/'),
+        provider.as_str()
+    );
+
+    let token_request = serde_json::json!({
+        "client_id": provider_config.client_id,
+        "client_secret": provider_config.client_secret,
+        "code": params.code,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    });
+
+    let token_url = provider.token_url();
+    let token_resp = match http_client.post(token_url)
+        .header("Accept", "application/json")
+        .json(&token_request)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            error!(error = %e, "OAuth token exchange failed");
+            return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">تعذر تبادل الـ token</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+        }
+    };
+
+    let token_body: serde_json::Value = match token_resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            error!(error = %e, "OAuth token parse failed");
+            return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">تعذر قراءة الـ token</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+        }
+    };
+
+    let access_token = match token_body.get("access_token").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => {
+            error!(token_body = %token_body, "No access_token in OAuth response");
+            return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">لا يوجد access token</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+        }
+    };
+
+    // Step 2: Fetch user info
+    let user_info_url = provider.user_info_url();
+    let mut user_req = http_client.get(user_info_url)
+        .header("Authorization", format!("Bearer {}", access_token));
+
+    if provider == OAuthProvider::Github {
+        user_req = user_req.header("Accept", "application/vnd.github.v3+json")
+            .header("User-Agent", "NovaX");
+    }
+
+    let user_resp = match user_req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            error!(error = %e, "OAuth user info fetch failed");
+            return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">تعذر جلب بيانات المستخدم</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+        }
+    };
+
+    let user_info: serde_json::Value = match user_resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            error!(error = %e, "OAuth user info parse failed");
+            return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">تعذر قراءة بيانات المستخدم</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+        }
+    };
+
+    // Step 3: Extract email, name, provider_user_id
+    let (email, name, provider_user_id, avatar_url) = match provider {
+        OAuthProvider::Google => {
+            let email = user_info.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = user_info.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let provider_user_id = user_info.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let avatar = user_info.get("picture").and_then(|v| v.as_str()).map(|s| s.to_string());
+            (email, name, provider_user_id, avatar)
+        }
+        OAuthProvider::Github => {
+            let email = user_info.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = user_info.get("name").and_then(|v| v.as_str())
+                .or_else(|| user_info.get("login").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            let provider_user_id = user_info.get("id").and_then(|v| v.as_i64()).map(|i| i.to_string())
+                .unwrap_or_default();
+            let avatar = user_info.get("avatar_url").and_then(|v| v.as_str()).map(|s| s.to_string());
+            (email, name, provider_user_id, avatar)
+        }
+    };
+
+    if email.is_empty() || provider_user_id.is_empty() {
+        error!("OAuth: missing email or provider_user_id");
+        return Html(r#"<div class="auth-page"><div class="auth-card" style="text-align:center;"><h1 class="auth-title">فشل</h1><p class="auth-subtitle">بيانات المستخدم غير مكتملة</p><a href="/auth/login" class="btn btn-primary">العودة</a></div></div>"#).into_response();
+    }
+
+    // Step 4: Find or create user
+    // Check if oauth_account exists
+    let existing_link: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT user_id FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2"
+    )
+    .bind(provider.as_str())
+    .bind(&provider_user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    let user_id = if let Some((uid,)) = existing_link {
+        // Existing OAuth link — log in
+        uid
+    } else {
+        // Check if user with same email exists
+        let existing_user: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+
+        let user_id = if let Some((uid,)) = existing_user {
+            // Link OAuth to existing user
+            uid
+        } else {
+            // Create new user
+            let user: AuthUser = sqlx::query_as(
+                r#"INSERT INTO users (email, name, avatar_url, password_hash, email_verified_at)
+                   VALUES ($1, $2, $3, '', NOW())
+                   RETURNING id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at"#,
+            )
+            .bind(&email)
+            .bind(&name)
+            .bind(&avatar_url)
+            .fetch_one(pool)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("Failed to create OAuth user")
+            });
+            user.id
+        };
+
+        // Create OAuth link
+        let _ = sqlx::query(
+            "INSERT INTO oauth_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)"
+        )
+        .bind(user_id)
+        .bind(provider.as_str())
+        .bind(&provider_user_id)
+        .execute(pool)
+        .await;
+
+        user_id
+    };
+
+    // Step 5: Generate JWT + create session
+    let user: AuthUser = sqlx::query_as(
+        "SELECT id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at FROM users WHERE id = $1 AND is_active = TRUE",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .ok()
+    .unwrap_or_else(|| panic!("User not found after OAuth"));
+
+    let (token, expires_at) = match auth.generate_token(&user) {
+        Ok((t, e)) => (t, e),
+        Err(e) => {
+            error!(error = %e, "Failed to generate token after OAuth");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Token generation failed").into_response();
+        }
+    };
+
+    // Store session
+    let refresh_token = auth.generate_refresh_token();
+    let _ = sqlx::query(
+        "INSERT INTO auth_sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)"
+    )
+    .bind(Uuid::new_v4())
+    .bind(user.id)
+    .bind(&refresh_token)
+    .bind(expires_at + chrono::Duration::seconds(auth.config().refresh_ttl_seconds))
+    .execute(pool)
+    .await;
+
+    info!(user_id = %user.id, provider = provider.as_str(), "OAuth login successful");
+
+    // Set cookie + redirect to admin
+    let cookie = format!(
+        "novax_token={}; Path=/; HttpOnly; Max-Age=3600; SameSite=Lax",
+        token
+    );
+    let mut response = Redirect::to("/admin").into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        cookie.parse().unwrap(),
+    );
+    response
 }
 
 // ─── API Auth Endpoints ───
@@ -991,6 +1262,136 @@ async fn upload_avatar_handler(
         }
     }
     (StatusCode::BAD_REQUEST, "No avatar field").into_response()
+}
+
+// ─── Profile + User Edit Handlers ───
+
+/// GET /profile — user's own profile page
+async fn profile_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+) -> Response {
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(profile_page(&ctx.user.email, initial, &ctx.user, None)).into_response()
+}
+
+#[derive(Deserialize)]
+struct ProfileUpdateForm {
+    name: Option<String>,
+    bio: Option<String>,
+}
+
+/// POST /profile/update — update own profile
+async fn profile_update_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Form(form): Form<ProfileUpdateForm>,
+) -> Response {
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let updated: AuthUser = sqlx::query_as(
+        r#"UPDATE users SET name = COALESCE($2, name), bio = COALESCE($3, bio), updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at"#,
+    )
+    .bind(ctx.user.id)
+    .bind(form.name.as_deref().filter(|s| !s.is_empty()))
+    .bind(form.bio.as_deref().filter(|s| !s.is_empty()))
+    .fetch_one(pool)
+    .await
+    .unwrap_or(ctx.user.clone());
+
+    let initial = updated.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(profile_page(&updated.email, initial, &updated, Some("تم تحديث ملفك الشخصي بنجاح"))).into_response()
+}
+
+/// GET /admin/users/:id/edit — admin edit user page
+async fn admin_user_edit_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let user: Option<AuthUser> = sqlx::query_as(
+        "SELECT id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at FROM users WHERE id = $1"
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+
+    let Some(user) = user else {
+        return (StatusCode::NOT_FOUND, "User not found").into_response();
+    };
+
+    let admin_initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(admin_user_edit_page(&ctx.user.email, admin_initial, &user, None)).into_response()
+}
+
+#[derive(Deserialize)]
+struct AdminUpdateUserForm {
+    name: String,
+    email: String,
+    bio: Option<String>,
+    avatar_url: Option<String>,
+    is_active: Option<String>,
+    is_admin: Option<String>,
+}
+
+/// POST /admin/users/:id/update — admin updates user
+async fn admin_user_update_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Form(form): Form<AdminUpdateUserForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    // Self-protection: cannot remove own admin
+    if ctx.user.id == id && form.is_admin.as_deref() != Some("true") {
+        return (StatusCode::BAD_REQUEST, "Cannot remove your own admin status").into_response();
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let is_active = form.is_active.as_deref() == Some("true");
+    let is_admin = form.is_admin.as_deref() == Some("true");
+
+    let updated: AuthUser = sqlx::query_as(
+        r#"UPDATE users SET
+            name = $2, email = $3, bio = $4, avatar_url = $5,
+            is_active = $6, is_admin = $7, updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at"#,
+    )
+    .bind(id)
+    .bind(&form.name)
+    .bind(&form.email)
+    .bind(form.bio.as_deref().filter(|s| !s.is_empty()))
+    .bind(form.avatar_url.as_deref().filter(|s| !s.is_empty()))
+    .bind(is_active)
+    .bind(is_admin)
+    .fetch_one(pool)
+    .await
+    .unwrap_or_else(|_| ctx.user.clone());
+
+    let admin_initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(admin_user_edit_page(&ctx.user.email, admin_initial, &updated, Some("تم تحديث المستخدم بنجاح"))).into_response()
 }
 
 // ─── Types ───

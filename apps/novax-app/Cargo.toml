@@ -22,6 +22,7 @@ novax-migrate = { workspace = true }
 novax-auth = { workspace = true }
 novax-rate-limit = { workspace = true }
 novax-web = { workspace = true }
+novax-mail = { workspace = true }
 
 tokio = { workspace = true }
 tracing = { workspace = true }

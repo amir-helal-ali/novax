@@ -17,6 +17,7 @@
 
 pub use novax_macros::{entity, main, route};
 pub use novax_auth as auth;
+pub use novax_mail as mail;
 pub use novax_migrate as migrate;
 pub use novax_network as network;
 pub use novax_observability as observability;

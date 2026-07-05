@@ -541,3 +541,223 @@ pub struct DashboardStats {
     pub admin_users: i64,
     pub recent_users_rows: String,
 }
+
+/// Profile page (for regular users — view/edit own profile)
+pub fn profile_page(
+    user_email: &str,
+    user_initial: char,
+    user: &novax_auth::AuthUser,
+    success_msg: Option<&str>,
+) -> String {
+    let success_html = success_msg
+        .map(|m| format!(r#"<div class="alert alert-success">{}</div>"#, m))
+        .unwrap_or_default();
+
+    let verified_badge = if user.email_verified_at.is_some() {
+        r#"<span class="badge badge-green">✓ مُحقَّق</span>"#
+    } else {
+        r#"<span class="badge badge-red">غير مُحقَّق</span>"#
+    };
+
+    let avatar_html = if let Some(url) = &user.avatar_url {
+        format!(r#"<img src="{}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;">"#, url)
+    } else {
+        format!(r#"<div style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; color: var(--bg); font-size: 32px; font-weight: 700;">{}</div>"#, user_initial)
+    };
+
+    let content = format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/profile" class="active"><span class="icon">👤</span> ملفي الشخصي</a>
+    {admin_link}
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">ملفي الشخصي</h1>
+    <p class="page-subtitle">عرض وتحديث بياناتك</p>
+    {success_html}
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px;">
+      <div class="card">
+        <div class="card-body" style="text-align: center;">
+          {avatar_html}
+          <h3 style="margin-top: 16px;">{name}</h3>
+          <p style="color: var(--text-muted); font-size: 14px;">{email}</p>
+          <div style="margin-top: 8px;">{verified_badge}</div>
+          {role_badge}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>تعديل البيانات</h3></div>
+        <div class="card-body">
+          <form method="POST" action="/profile/update" enctype="multipart/form-data">
+            <div class="form-group">
+              <label>الاسم</label>
+              <input type="text" name="name" value="{name}" required>
+            </div>
+            <div class="form-group">
+              <label>البريد الإلكتروني</label>
+              <input type="email" value="{email}" disabled style="opacity: 0.6;">
+            </div>
+            <div class="form-group">
+              <label>نبذة عنك</label>
+              <textarea name="bio" rows="3" placeholder="اكتب نبذة عنك...">{bio}</textarea>
+            </div>
+            <div class="form-group">
+              <label>الصورة الرمزية</label>
+              <input type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp" onchange="document.getElementById('avatarForm').submit()">
+              <div class="desc">حد أقصى 2MB — PNG, JPG, GIF, WebP</div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: auto; padding: 12px 32px;">حفظ التغييرات</button>
+          </form>
+          <form id="avatarForm" method="POST" action="/api/users/avatar" enctype="multipart/form-data" style="display:none;"></form>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header"><h3>الأمان</h3></div>
+      <div class="card-body">
+        <a href="/auth/change-password" class="btn btn-secondary" style="width: auto;">تغيير كلمة المرور</a>
+      </div>
+    </div>
+  </div>
+</div>"#,
+        admin_header = admin_header("ملفي الشخصي", user_email, user_initial),
+        admin_link = if user.is_admin {
+            r#"<a href="/admin"><span class="icon">⚙️</span> لوحة الإدارة</a>"#
+        } else {
+            ""
+        },
+        success_html = success_html,
+        avatar_html = avatar_html,
+        name = user.name,
+        email = user.email,
+        verified_badge = verified_badge,
+        role_badge = if user.is_admin {
+            r#"<div style="margin-top: 4px;"><span class="badge badge-yellow">مسؤول</span></div>"#
+        } else {
+            ""
+        },
+        bio = user.bio.as_deref().unwrap_or(""),
+    );
+
+    page("ملفي الشخصي", &content)
+}
+
+/// Admin user edit page
+pub fn admin_user_edit_page(
+    admin_email: &str,
+    admin_initial: char,
+    user: &novax_auth::AuthUser,
+    success_msg: Option<&str>,
+) -> String {
+    let success_html = success_msg
+        .map(|m| format!(r#"<div class="alert alert-success">{}</div>"#, m))
+        .unwrap_or_default();
+
+    let content = format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users" class="active"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">تعديل المستخدم</h1>
+    <p class="page-subtitle">{user_email}</p>
+    {success_html}
+    <div class="card">
+      <div class="card-header">
+        <h3>بيانات المستخدم</h3>
+        <a href="/admin/users">← العودة للقائمة</a>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="/admin/users/{user_id}/update">
+          <div class="form-row">
+            <div class="form-group">
+              <label>الاسم</label>
+              <input type="text" name="name" value="{name}" required>
+            </div>
+            <div class="form-group">
+              <label>البريد الإلكتروني</label>
+              <input type="email" name="email" value="{email}" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>نبذة</label>
+            <textarea name="bio" rows="3">{bio}</textarea>
+          </div>
+          <div class="form-group">
+            <label>رابط الصورة الرمزية</label>
+            <input type="url" name="avatar_url" value="{avatar_url}" placeholder="https://...">
+          </div>
+          <div class="settings-grid">
+            <div class="settings-item">
+              <label>
+                نشط
+                <div class="toggle {active_on}" data-toggle="is_active"></div>
+                <input type="hidden" name="is_active" value="{active_value}">
+              </label>
+            </div>
+            <div class="settings-item">
+              <label>
+                مسؤول
+                <div class="toggle {admin_on}" data-toggle="is_admin"></div>
+                <input type="hidden" name="is_admin" value="{admin_value}">
+              </label>
+            </div>
+          </div>
+          <div style="margin-top: 16px;">
+            <button type="submit" class="btn btn-primary" style="width: auto; padding: 12px 32px;">حفظ التغييرات</button>
+            <a href="/admin/users" class="btn btn-secondary" style="width: auto; padding: 12px 32px; margin-right: 8px;">إلغاء</a>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-header"><h3>معلومات إضافية</h3></div>
+      <div class="card-body">
+        <p><strong>تاريخ الإنشاء:</strong> {created_at}</p>
+        <p><strong>آخر تحديث:</strong> {updated_at}</p>
+        <p><strong>التحقق من البريد:</strong> {verified}</p>
+        <p><strong>معرف المستخدم:</strong> <code>{user_id}</code></p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.querySelectorAll('.toggle').forEach(t => {{
+    t.addEventListener('click', () => {{
+      t.classList.toggle('on');
+      const name = t.dataset.toggle;
+      const input = document.querySelector(`input[name="${{name}}"]`);
+      input.value = t.classList.contains('on') ? 'true' : 'false';
+    }});
+  }});
+</script>"#,
+        admin_header = admin_header("تعديل مستخدم", admin_email, admin_initial),
+        user_email = user.email,
+        success_html = success_html,
+        user_id = user.id,
+        name = user.name,
+        email = user.email,
+        bio = user.bio.as_deref().unwrap_or(""),
+        avatar_url = user.avatar_url.as_deref().unwrap_or(""),
+        active_on = if user.is_active { "on" } else { "" },
+        active_value = if user.is_active { "true" } else { "false" },
+        admin_on = if user.is_admin { "on" } else { "" },
+        admin_value = if user.is_admin { "true" } else { "false" },
+        created_at = user.created_at.format("%Y-%m-%d %H:%M"),
+        updated_at = user.updated_at.format("%Y-%m-%d %H:%M"),
+        verified = if user.email_verified_at.is_some() {
+            format!("✓ مُحقَّق في {}", user.email_verified_at.unwrap().format("%Y-%m-%d"))
+        } else {
+            "غير مُحقَّق".to_string()
+        },
+    );
+
+    page("تعديل مستخدم", &content)
+}
