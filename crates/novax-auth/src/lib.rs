@@ -440,6 +440,85 @@ impl AuthService {
         info!(%user_id, "User changed password");
         Ok(())
     }
+
+    /// إنشاء مستخدم أدمن افتراضي عند بدء التشغيل (seed)
+    ///
+    /// يتحقق أولاً إن كان يوجد أي أدمن؛ إذا نعم، لا يفعل شيئًا.
+    /// إذا لا، ينشئ مستخدم أدمن بالبريد وكلمة المرور المحددين.
+    ///
+    /// البيانات الافتراضية (قابلة للتخصيص عبر env vars):
+    /// - البريد: ADMIN_EMAIL أو "admin@novax.local"
+    /// - كلمة المرور: ADMIN_PASSWORD أو "admin12345"
+    /// - الاسم: ADMIN_NAME أو "Administrator"
+    #[cfg(feature = "postgres")]
+    pub async fn seed_admin_user(&self, pool: &PgPool) -> Result<SeedResult, AuthError> {
+        // تحقق: هل يوجد أي أدمن؟
+        let existing_admin: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM users WHERE is_admin = TRUE LIMIT 1")
+                .fetch_optional(pool)
+                .await?;
+
+        if existing_admin.is_some() {
+            return Ok(SeedResult::AlreadyExists);
+        }
+
+        // اقرأ الإعدادات من env vars
+        let email = std::env::var("ADMIN_EMAIL")
+            .unwrap_or_else(|_| "admin@novax.local".to_string());
+        let password = std::env::var("ADMIN_PASSWORD")
+            .unwrap_or_else(|_| "admin12345".to_string());
+        let name = std::env::var("ADMIN_NAME")
+            .unwrap_or_else(|_| "Administrator".to_string());
+
+        // تحقق من قوة كلمة المرور
+        Self::validate_password_strength(&password)?;
+
+        // أنشئ الأدمن (is_admin = TRUE يدويًا لأن الـ trigger يعمل فقط
+        // على أول مستخدم، وهذا قد لا يكون أول مستخدم)
+        let password_hash = self.hash_password(&password)?;
+
+        let user: AuthUser = sqlx::query_as(
+            r#"INSERT INTO users (email, name, password_hash, is_admin, email_verified_at)
+               VALUES ($1, $2, $3, TRUE, NOW())
+               ON CONFLICT (email) DO UPDATE
+                 SET is_admin = TRUE,
+                     password_hash = EXCLUDED.password_hash,
+                     email_verified_at = COALESCE(users.email_verified_at, NOW()),
+                     updated_at = NOW()
+               RETURNING id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at"#,
+        )
+        .bind(&email)
+        .bind(&name)
+        .bind(&password_hash)
+        .fetch_one(pool)
+        .await?;
+
+        info!(
+            admin_id = %user.id,
+            email = %user.email,
+            "Default admin user seeded successfully"
+        );
+
+        if password == "admin12345" {
+            warn!(
+                "ADMIN_PASSWORD is using the default value — change it immediately in production!"
+            );
+        }
+
+        Ok(SeedResult::Created { email, password })
+    }
+}
+
+/// نتيجة seed_admin_user
+#[derive(Debug)]
+pub enum SeedResult {
+    /// الأدمن موجود بالفعل — لم يُفعل شيئ
+    AlreadyExists,
+    /// تم إنشاء أدمن جديد
+    Created {
+        email: String,
+        password: String,
+    },
 }
 
 /// Extract the Bearer token from an Authorization header

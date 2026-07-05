@@ -35,7 +35,7 @@ use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfi
 use novax_compiler::{build_project, GeneratedFile};
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
-use tracing::{info, error, warn};
+use tracing::{info, error, warn, debug};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
@@ -139,12 +139,31 @@ impl App {
                 return Err(AppError::Migration(e.to_string()));
             }
 
-            self.state.db = Some(pool);
+            self.state.db = Some(pool.clone());
 
             if let Some(auth_config) = self.auth_config.take() {
                 let auth = AuthService::new(auth_config);
-                self.state.auth = Some(Arc::new(auth));
+                self.state.auth = Some(Arc::new(auth.clone()));
                 info!("Authentication service initialized");
+
+                // Seed default admin user
+                match auth.seed_admin_user(&pool).await {
+                    Ok(novax_auth::SeedResult::Created { email, password }) => {
+                        info!(
+                            email = %email,
+                            "✅ Default admin user created — login with the configured ADMIN_PASSWORD"
+                        );
+                        if password == "admin12345" {
+                            warn!("⚠️  Using default admin password — set ADMIN_PASSWORD env var!");
+                        }
+                    }
+                    Ok(novax_auth::SeedResult::AlreadyExists) => {
+                        debug!("Admin user already exists — skipping seed");
+                    }
+                    Err(e) => {
+                        error!(error = %e, "Failed to seed admin user — continuing anyway");
+                    }
+                }
             }
 
             if let Some(rl_config) = self.rate_limit_config.take() {

@@ -23,6 +23,10 @@ services:
       - DATABASE_URL=postgres://novax:novax@postgres:5432/novax
       - DB_MAX_CONNECTIONS=10
       - JWT_SECRET=novax_dev_secret_change_in_production_please_use_a_long_random_string
+      # Default Admin (auto-created on first startup)
+      - ADMIN_EMAIL=admin@novax.local
+      - ADMIN_PASSWORD=admin12345
+      - ADMIN_NAME=Administrator
       # Rate Limiting
       - RATE_LIMIT_ENABLED=true
       - RATE_LIMIT_MAX_REQUESTS=100
