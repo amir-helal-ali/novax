@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin system with WASM sandbox
 - Hot reload for development
 
+## [0.2.1] — 2026-07-05
+
+### Fixed
+- **Docker build failure**: bumped Rust from 1.85 to 1.88 in Dockerfile.
+  Recent versions of `home`, `icu_collections`, `icu_locale_core`, `icu_normalizer`,
+  `icu_properties`, `icu_provider`, and `idna_adapter` require Rust 1.86+ (home: 1.88+).
+- Updated `rust-version` in workspace Cargo.toml to 1.88.
+- Updated CI workflow to pin Rust 1.88.
+- Updated README to reflect Rust 1.88+ requirement.
+
 ## [0.2.0] — 2026-07-05
 
 ### Added

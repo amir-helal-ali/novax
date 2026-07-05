@@ -3,8 +3,8 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ─── Stage 1: Builder ───
-# Use Rust 1.85+ for edition 2024 support (required by recent clap_lex)
-FROM rust:1.85-slim AS builder
+# Use latest stable Rust (1.88+) for newer dependencies (icu_*, home, etc.)
+FROM rust:1.88-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \

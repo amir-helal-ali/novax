@@ -1138,7 +1138,7 @@ dependencies = [
 
 [[package]]
 name = "novax"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "novax-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "novax",
  "novax-migrate",
@@ -1181,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "novax-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1198,7 +1198,7 @@ dependencies = [
 
 [[package]]
 name = "novax-macros"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1207,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "novax-migrate"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "novax-network"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "novax-observability",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "novax-observability"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "dashmap",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "novax-orm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1262,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "novax-router"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1276,7 +1276,7 @@ dependencies = [
 
 [[package]]
 name = "novax-runtime"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "parking_lot",
  "thiserror 1.0.69",
@@ -1286,7 +1286,7 @@ dependencies = [
 
 [[package]]
 name = "novax-storage"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
