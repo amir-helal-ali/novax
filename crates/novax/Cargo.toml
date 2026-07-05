@@ -24,6 +24,8 @@ novax-rate-limit = { workspace = true }
 novax-web = { workspace = true }
 novax-mail = { workspace = true }
 novax-seo = { workspace = true }
+novax-core = { workspace = true }
+novax-compiler = { workspace = true }
 
 tokio = { workspace = true }
 axum = { workspace = true }

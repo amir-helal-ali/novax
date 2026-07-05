@@ -31,6 +31,8 @@ use novax_rate_limit::{RateLimiter, RateLimitConfig, spawn_cleanup_task};
 use novax_router::{RouterConfig, with_defaults};
 use novax_seo::{generate_robots_txt, generate_sitemap, generate_manifest, default_sitemap, SeoConfig};
 use novax_web::render::*;
+use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfig};
+use novax_compiler::{build_project, GeneratedFile};
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
 use tracing::{info, error, warn};
@@ -265,6 +267,14 @@ fn build_router(state: AppState) -> Router {
         // Avatar upload (protected)
         router = router
             .route("/api/users/avatar", post(upload_avatar_handler).layer(from_fn_with_state(state.clone(), require_auth)));
+
+        // ─── Novax Engine: Project Management (admin only) ───
+        router = router
+            .route("/admin/projects", get(admin_projects_handler).post(admin_create_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id", get(admin_project_detail_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/entities", post(admin_add_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/export", get(admin_export_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/preview", get(admin_preview_project_handler).layer(from_fn_with_state(state.clone(), require_auth)));
     }
 
     // Apply rate limiting globally
@@ -1427,6 +1437,551 @@ async fn admin_user_update_handler(
 
     let admin_initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
     Html(admin_user_edit_page(&ctx.user.email, admin_initial, &updated, Some("تم تحديث المستخدم بنجاح"))).into_response()
+}
+
+// ─── Novax Engine: Project Management Handlers ───
+
+/// GET /admin/projects — قائمة المشاريع
+async fn admin_projects_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let projects: Vec<ProjectRow> = sqlx::query_as(
+        "SELECT id, name, display_name, description, enabled, created_at, updated_at FROM novax_projects ORDER BY created_at DESC"
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let rows = projects.iter().map(|p| {
+        format!(
+            r#"<tr>
+                <td><a href="/admin/projects/{}"><strong>{}</strong></a></td>
+                <td>{}</td>
+                <td>{}</td>
+                <td>{}</td>
+                <td class="actions">
+                    <a href="/admin/projects/{}/preview" class="btn btn-secondary btn-sm">معاينة</a>
+                    <a href="/admin/projects/{}/export" class="btn btn-primary btn-sm">تصدير</a>
+                </td>
+            </tr>"#,
+            p.id, p.name, p.display_name,
+            p.description.as_deref().unwrap_or("—"),
+            p.created_at.format("%Y-%m-%d"),
+            p.id, p.id,
+        )
+    }).collect::<String>();
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">المشاريع</h1>
+    <p class="page-subtitle">إدارة مشاريع Novax — منشئ التطبيقات الموجّه بالنيّة</p>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header"><h3>إنشاء مشروع جديد</h3></div>
+      <div class="card-body">
+        <form method="POST" action="/admin/projects">
+          <div class="form-row">
+            <div class="form-group">
+              <label>اسم المشروع (PascalCase)</label>
+              <input type="text" name="name" required placeholder="MyStore" pattern="[A-Z][a-zA-Z0-9]*">
+            </div>
+            <div class="form-group">
+              <label>الاسم المعروض (عربي)</label>
+              <input type="text" name="display_name" required placeholder="متجري">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>الوصف (اختياري)</label>
+            <textarea name="description" rows="2" placeholder="وصف موجز للمشروع..."></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: auto;">+ إنشاء المشروع</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>المشاريع الحالية</h3></div>
+      <table class="table">
+        <thead>
+          <tr><th>الاسم</th><th>الاسم المعروض</th><th>الوصف</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr>
+        </thead>
+        <tbody>
+          {rows}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>"#,
+        admin_header = admin_header("المشاريع", &ctx.user.email, initial),
+        rows = if rows.is_empty() {
+            r#"<tr><td colspan="5" style="text-align: center; opacity: 0.5; padding: 32px;">لا توجد مشاريع بعد. أنشئ أول مشروع أعلاه.</td></tr>"#.to_string()
+        } else {
+            rows
+        },
+    )).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateProjectForm {
+    name: String,
+    display_name: String,
+    description: Option<String>,
+}
+
+/// POST /admin/projects — إنشاء مشروع جديد
+async fn admin_create_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Form(form): Form<CreateProjectForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let project = ProjectConfig::new(&form.name, &form.display_name);
+    let mut project = project;
+    project.description = form.description;
+
+    let config_json = match project.to_json() {
+        Ok(j) => j,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("JSON error: {}", e)).into_response(),
+    };
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let result = sqlx::query(
+        "INSERT INTO novax_projects (id, name, display_name, description, config) VALUES ($1, $2, $3, $4, $5)"
+    )
+    .bind(project.id)
+    .bind(&project.name)
+    .bind(&project.display_name)
+    .bind(&project.description)
+    .bind(&config_json)
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(_) => Redirect::to(&format!("/admin/projects/{}", project.id)).into_response(),
+        Err(e) => {
+            let msg = if e.to_string().contains("unique") {
+                "اسم المشروع موجود بالفعل"
+            } else {
+                "حدث خطأ أثناء الإنشاء"
+            };
+            (StatusCode::BAD_REQUEST, msg).into_response()
+        }
+    }
+}
+
+/// GET /admin/projects/:id — تفاصيل المشروع + الكيانات
+async fn admin_project_detail_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let row: Option<(String,)> = sqlx::query_as("SELECT config FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+    let Some((config_json,)) = row else {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    };
+
+    let project: ProjectConfig = match ProjectConfig::from_json(&config_json) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Parse error: {}", e)).into_response(),
+    };
+
+    let entities_html = project.entities.iter().map(|e| {
+        format!(
+            r#"<div class="card" style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3 style="display: inline;">{} {}</h3>
+                        <span style="color: var(--text-muted); margin-right: 8px;">({} حقل)</span>
+                    </div>
+                    <div class="actions">
+                        <a href="/admin/projects/{}/preview" class="btn btn-secondary btn-sm">معاينة</a>
+                    </div>
+                </div>
+                <div style="margin-top: 8px; color: var(--text-muted); font-size: 13px;">
+                    الجدول: <code>{}</code> · المسار: <code>/{}'</code>
+                </div>
+            </div>"#,
+            e.icon, e.display_name, e.fields.len(),
+            id, e.table(), e.route_prefix(),
+        )
+    }).collect::<String>();
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">{name}</h1>
+    <p class="page-subtitle">{desc}</p>
+
+    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+      <a href="/admin/projects/{id}/preview" class="btn btn-primary">🔍 معاينة مباشرة</a>
+      <a href="/admin/projects/{id}/export" class="btn btn-secondary">📥 تصدير للإنتاج</a>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header">
+        <h3>إضافة كيان جديد</h3>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="/admin/projects/{id}/entities">
+          <div class="form-row">
+            <div class="form-group">
+              <label>اسم الكيان (PascalCase)</label>
+              <input type="text" name="name" required placeholder="Product" pattern="[A-Z][a-zA-Z0-9]*">
+            </div>
+            <div class="form-group">
+              <label>الاسم (مفرد)</label>
+              <input type="text" name="display_name" required placeholder="منتج">
+            </div>
+            <div class="form-group">
+              <label>الاسم (جمع)</label>
+              <input type="text" name="display_name_plural" required placeholder="منتجات">
+            </div>
+            <div class="form-group">
+              <label>الأيقونة (emoji)</label>
+              <input type="text" name="icon" value="📦" maxlength="4">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: auto;">+ إضافة كيان</button>
+        </form>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom: 12px;">الكيانات ({count})</h3>
+    {entities}
+  </div>
+</div>"#,
+        admin_header = admin_header("تفاصيل المشروع", &ctx.user.email, initial),
+        name = project.display_name,
+        desc = project.description.as_deref().unwrap_or("لا يوجد وصف"),
+        id = id,
+        count = project.entities.len(),
+        entities = if entities_html.is_empty() {
+            r#"<div class="empty-state"><p>لا توجد كيانات بعد. أضف أول كيان أعلاه.</p></div>"#.to_string()
+        } else {
+            entities_html
+        },
+    )).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct AddEntityForm {
+    name: String,
+    display_name: String,
+    display_name_plural: String,
+    icon: String,
+}
+
+/// POST /admin/projects/:id/entities — إضافة كيان
+async fn admin_add_entity_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Form(form): Form<AddEntityForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let row: Option<(String,)> = sqlx::query_as("SELECT config FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+    let Some((config_json,)) = row else {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    };
+
+    let mut project: ProjectConfig = match ProjectConfig::from_json(&config_json) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Parse error: {}", e)).into_response(),
+    };
+
+    let entity = EntityConfig::new(&form.name, &form.display_name, &form.display_name_plural);
+    let mut entity = entity;
+    entity.icon = form.icon;
+    project.add_entity(entity);
+
+    let config_json = match project.to_json() {
+        Ok(j) => j,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("JSON error: {}", e)).into_response(),
+    };
+
+    let _ = sqlx::query("UPDATE novax_projects SET config = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&config_json)
+        .bind(id)
+        .execute(pool)
+        .await;
+
+    Redirect::to(&format!("/admin/projects/{}", id)).into_response()
+}
+
+/// GET /admin/projects/:id/export — تصدير المشروع (عرض الكود المُولَّد)
+async fn admin_export_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let row: Option<(String,)> = sqlx::query_as("SELECT config FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+    let Some((config_json,)) = row else {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    };
+
+    let project: ProjectConfig = match ProjectConfig::from_json(&config_json) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Parse error: {}", e)).into_response(),
+    };
+
+    let files = match build_project(&project) {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_REQUEST, format!("Compile error: {}", e)).into_response(),
+    };
+
+    // عرض الملفات المُولَّدة في صفحة HTML
+    let files_html = files.iter().map(|f| {
+        format!(
+            r#"<div class="card" style="margin-bottom: 16px;">
+                <div class="card-header">
+                    <h3><code>{}</code></h3>
+                    <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('content-{}')">نسخ</button>
+                </div>
+                <div class="card-body">
+                    <pre id="content-{}" style="background: #0a0a0b; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.5; direction: ltr; text-align: left;"><code>{}</code></pre>
+                </div>
+            </div>"#,
+            f.path,
+            f.path.replace('/', "-").replace('.', "-"),
+            f.path.replace('/', "-").replace('.', "-"),
+            escape_html(&f.content),
+        )
+    }).collect::<String>();
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">تصدير: {name}</h1>
+    <p class="page-subtitle">{count} ملف — كود Rust + HTML + SQL + CSS مستقل تمامًا عن Novax</p>
+    <div class="alert alert-success" style="margin-bottom: 24px;">
+      ✅ الكود المُولَّد مستقل عن Novax. يمكن نسخه وتشغيله بأمر <code>cargo run --release</code> على أي خادم.
+    </div>
+    {files}
+  </div>
+</div>
+<script>
+function copyToClipboard(id) {{
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text);
+}}
+</script>"#,
+        admin_header = admin_header("تصدير المشروع", &ctx.user.email, initial),
+        name = project.display_name,
+        count = files.len(),
+        files = files_html,
+    )).into_response()
+}
+
+/// GET /admin/projects/:id/preview — معاينة الكود المُولَّد
+async fn admin_preview_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let row: Option<(String,)> = sqlx::query_as("SELECT config FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+
+    let Some((config_json,)) = row else {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    };
+
+    let project: ProjectConfig = match ProjectConfig::from_json(&config_json) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Parse error: {}", e)).into_response(),
+    };
+
+    let css = project.theme.to_css();
+    let entity_links: String = project.entities.iter()
+        .map(|e| format!(r##"<a href="#" class="btn btn-secondary">{icon} {name}</a>"##, icon = e.icon, name = e.display_name_plural))
+        .collect::<Vec<_>>()
+        .join("\n    ");
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r#"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">معاينة: {name}</h1>
+    <p class="page-subtitle">معاينة مباشرة للكود المُولَّد (CSS + HTML من الإعدادات)</p>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header"><h3>🎨 المعاينة (CSS من إعدادات المظهر)</h3></div>
+      <div class="card-body">
+        <style>{css}</style>
+        <div style="background: var(--color-bg); color: var(--color-text); padding: 20px; border-radius: var(--radius); direction: var(--dir);">
+          <nav class="nav">
+            {entity_links}
+          </nav>
+          <div class="page-header">
+            <h1>عنوان الصفحة</h1>
+            <button class="btn btn-primary">+ إضافة جديدة</button>
+          </div>
+          <table class="table">
+            <thead>
+              <tr><th>العمود الأول</th><th>العمود الثاني</th><th>الحالة</th><th>إجراءات</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>عنصر 1</td>
+                <td>قيمة</td>
+                <td><span class="badge badge-success">✓ نشط</span></td>
+                <td class="actions"><button class="btn btn-secondary btn-sm">عرض</button><button class="btn btn-danger btn-sm">حذف</button></td>
+              </tr>
+              <tr>
+                <td>عنصر 2</td>
+                <td>قيمة</td>
+                <td><span class="badge badge-danger">✗ معطّل</span></td>
+                <td class="actions"><button class="btn btn-secondary btn-sm">عرض</button><button class="btn btn-danger btn-sm">حذف</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>📥 جاهز للتصدير</h3></div>
+      <div class="card-body">
+        <p>المشروع يحتوي على <strong>{entity_count}</strong> كيان و <strong>{field_count}</strong> حقل إجمالاً.</p>
+        <a href="/admin/projects/{id}/export" class="btn btn-primary">📥 تصدير الكود الكامل</a>
+      </div>
+    </div>
+  </div>
+</div>"#,
+        admin_header = admin_header("معاينة المشروع", &ctx.user.email, initial),
+        name = project.display_name,
+        css = css,
+        entity_links = if entity_links.is_empty() { "لا توجد كيانات".to_string() } else { entity_links },
+        entity_count = project.entities.len(),
+        field_count = project.entities.iter().map(|e| e.fields.len()).sum::<usize>(),
+        id = id,
+    )).into_response()
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct ProjectRow {
+    id: Uuid,
+    name: String,
+    display_name: String,
+    description: Option<String>,
+    enabled: bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }
 
 // ─── Types ───

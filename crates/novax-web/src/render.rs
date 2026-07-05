@@ -572,7 +572,7 @@ pub fn admin_settings_page(
 // ─── Helpers ───
 
 /// Admin header (with user info + logout)
-fn admin_header(title: &str, user_email: &str, user_initial: char) -> String {
+pub fn admin_header(title: &str, user_email: &str, user_initial: char) -> String {
     format!(
         r#"<header class="admin-header">
   <div class="container">
