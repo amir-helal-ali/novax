@@ -89,6 +89,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,6 +228,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest",
 ]
 
 [[package]]
@@ -1138,11 +1159,12 @@ dependencies = [
 
 [[package]]
 name = "novax"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "novax-auth",
  "novax-macros",
  "novax-migrate",
  "novax-network",
@@ -1165,9 +1187,10 @@ dependencies = [
 
 [[package]]
 name = "novax-app"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "novax",
+ "novax-auth",
  "novax-migrate",
  "novax-network",
  "novax-observability",
@@ -1180,8 +1203,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "novax-auth"
+version = "0.3.0"
+dependencies = [
+ "argon2",
+ "async-trait",
+ "base64",
+ "chrono",
+ "hmac",
+ "once_cell",
+ "parking_lot",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "novax-cli"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1198,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "novax-macros"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1207,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "novax-migrate"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1219,7 +1265,7 @@ dependencies = [
 
 [[package]]
 name = "novax-network"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "axum",
  "novax-observability",
@@ -1232,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "novax-observability"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -1246,7 +1292,7 @@ dependencies = [
 
 [[package]]
 name = "novax-orm"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1262,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "novax-router"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1276,7 +1322,7 @@ dependencies = [
 
 [[package]]
 name = "novax-runtime"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "parking_lot",
  "thiserror 1.0.69",
@@ -1286,7 +1332,7 @@ dependencies = [
 
 [[package]]
 name = "novax-storage"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1385,6 +1431,17 @@ dependencies = [
  "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core",
+ "subtle",
 ]
 
 [[package]]

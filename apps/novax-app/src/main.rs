@@ -1,14 +1,13 @@
 //! NovaX Example Application
 //!
-//! This is a sample NovaX app showing how to use the platform with PostgreSQL.
-//! Run with: `cargo run -p novax-app` or `docker compose up`.
+//! Demonstrates the platform with PostgreSQL + Authentication + Posts CRUD.
 //!
 //! Environment variables:
 //! - HOST: bind host (default 0.0.0.0)
 //! - PORT: bind port (default 3000)
 //! - RUST_LOG: log level (default info)
 //! - DATABASE_URL: PostgreSQL connection string
-//!   (default postgres://novax:novax@localhost:5432/novax)
+//! - JWT_SECRET: secret for JWT signing (IMPORTANT in production!)
 
 use novax::prelude::*;
 use tracing::{info, error};
@@ -34,21 +33,25 @@ async fn main() {
         max_lifetime_seconds: 1800,
     };
 
-    // Build the app with database
-    let app = App::new()
-        .with_database(db_config);
+    // Auth configuration from environment
+    let auth_config = AuthConfig::default();
 
-    // Initialize (connect to DB + run migrations)
+    // Build the app with database + auth
+    let app = App::new()
+        .with_database(db_config)
+        .with_auth(auth_config);
+
+    // Initialize (connect DB + run migrations + init auth)
     let app = match app.initialize().await {
         Ok(app) => app,
         Err(e) => {
             error!("Failed to initialize app: {}", e);
-            error!("Continuing without database — user endpoints will return 503");
+            error!("Continuing without database — API endpoints will return 503");
             App::new()
         }
     };
 
-    // Get bind address from environment or use default
+    // Get bind address
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("{}:{}", host, port);

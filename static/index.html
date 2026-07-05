@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NovaX v0.2 — منصة الويب المتكاملة بلغة Rust</title>
+  <title>NovaX v0.3 — منصة الويب المتكاملة بلغة Rust</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -331,7 +331,7 @@
         <div class="header-meta">
           <span class="status-badge">
             <span class="status-dot"></span>
-            <span>Live · v0.2.0</span>
+            <span>Live · v0.3.0</span>
           </span>
           <span>Rust + WebAssembly</span>
         </div>
@@ -363,11 +363,19 @@
         <div class="stat-label">مستخدم في DB</div>
       </div>
       <div class="stat-card">
+        <div class="stat-value" id="stat-posts">—</div>
+        <div class="stat-label">منشور في DB</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-value" id="stat-db">—</div>
         <div class="stat-label">حالة DB</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" id="stat-version">v0.2.0</div>
+        <div class="stat-value" id="stat-auth">—</div>
+        <div class="stat-label">حالة Auth</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-version">v0.3.0</div>
         <div class="stat-label">الإصدار الحالي</div>
       </div>
       <div class="stat-card">
@@ -442,7 +450,7 @@
   <section class="section">
     <div class="container">
       <h2 class="section-title">REST API Endpoints</h2>
-      <p class="section-subtitle">جميع الـ endpoints متاحة الآن للتجربة</p>
+      <p class="section-subtitle">جميع الـ endpoints متاحة الآن للتجربة — Auth + Users + Posts CRUD</p>
       <div class="endpoints">
         <div class="endpoint">
           <span class="method get">GET</span>
@@ -452,7 +460,7 @@
         <div class="endpoint">
           <span class="method get">GET</span>
           <span class="path">/api/health</span>
-          <span class="desc">فحص صحة النظام + حالة DB</span>
+          <span class="desc">فحص صحة النظام + DB + Auth</span>
         </div>
         <div class="endpoint">
           <span class="method get">GET</span>
@@ -470,14 +478,34 @@
           <span class="desc">Prometheus metrics</span>
         </div>
         <div class="endpoint">
-          <span class="method get">GET</span>
-          <span class="path">/api/users?page=1&per_page=20</span>
-          <span class="desc">قائمة المستخدمين (مع pagination)</span>
+          <span class="method post">POST</span>
+          <span class="path">/auth/register</span>
+          <span class="desc">تسجيل حساب جديد (email, name, password)</span>
         </div>
         <div class="endpoint">
           <span class="method post">POST</span>
-          <span class="path">/api/users</span>
-          <span class="desc">إنشاء مستخدم جديد</span>
+          <span class="path">/auth/login</span>
+          <span class="desc">تسجيل الدخول — يُرجع JWT + refresh token</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/auth/me</span>
+          <span class="desc">عرض بياناتي (محمي — يتطلب Bearer token)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method post">POST</span>
+          <span class="path">/auth/logout</span>
+          <span class="desc">تسجيل الخروج — إلغاء جميع الجلسات (محمي)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method post">POST</span>
+          <span class="path">/auth/change-password</span>
+          <span class="desc">تغيير كلمة المرور (محمي)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/users?page=1&per_page=20</span>
+          <span class="desc">قائمة المستخدمين (مع pagination)</span>
         </div>
         <div class="endpoint">
           <span class="method get">GET</span>
@@ -485,12 +513,12 @@
           <span class="desc">عرض مستخدم</span>
         </div>
         <div class="endpoint">
-          <span class="method get">PATCH</span>
+          <span class="method patch">PATCH</span>
           <span class="path">/api/users/:id</span>
           <span class="desc">تعديل مستخدم</span>
         </div>
         <div class="endpoint">
-          <span class="method get">DELETE</span>
+          <span class="method delete">DELETE</span>
           <span class="path">/api/users/:id</span>
           <span class="desc">حذف مستخدم</span>
         </div>
@@ -498,6 +526,41 @@
           <span class="method get">GET</span>
           <span class="path">/api/users/count</span>
           <span class="desc">عدد المستخدمين الكلي</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/posts?page=1&per_page=20</span>
+          <span class="desc">قائمة المنشورات (مع pagination)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method post">POST</span>
+          <span class="path">/api/posts</span>
+          <span class="desc">إنشاء منشور (مع author_id FK)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/posts/:id</span>
+          <span class="desc">عرض منشور (يزيد view_count)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method patch">PATCH</span>
+          <span class="path">/api/posts/:id</span>
+          <span class="desc">تعديل منشور</span>
+        </div>
+        <div class="endpoint">
+          <span class="method delete">DELETE</span>
+          <span class="path">/api/posts/:id</span>
+          <span class="desc">حذف منشور</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/posts/count</span>
+          <span class="desc">عدد المنشورات الكلي</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/users/:id/posts</span>
+          <span class="desc">منشورات مستخدم محدد</span>
         </div>
       </div>
     </div>
@@ -554,7 +617,7 @@ docker compose up
   <footer>
     <div class="container">
       <p>
-        NovaX v0.2.0 · مفتوح المصدر تحت رخصة Apache-2.0 / MIT ·
+        NovaX v0.3.0 · مفتوح المصدر تحت رخصة Apache-2.0 / MIT ·
         <a href="https://github.com/amir-helal-ali/novax">GitHub</a> ·
         <a href="/api/info">API</a> ·
         <a href="/api/health">Health</a>
@@ -566,12 +629,13 @@ docker compose up
   </footer>
 
   <script>
-    // Fetch live health status and DB info
+    // Fetch live health status, DB info, users count, posts count
     async function refreshStats() {
       try {
-        const [healthRes, usersCountRes] = await Promise.all([
+        const [healthRes, usersCountRes, postsCountRes] = await Promise.all([
           fetch('/api/health'),
-          fetch('/api/users/count').catch(() => null)
+          fetch('/api/users/count').catch(() => null),
+          fetch('/api/posts/count').catch(() => null)
         ]);
 
         const health = await healthRes.json();
@@ -584,6 +648,15 @@ docker compose up
           dbEl.style.color = health.database === 'healthy'
             ? 'var(--green)'
             : (health.database === 'disabled' ? 'var(--text-muted)' : 'var(--red)');
+        }
+
+        // Update Auth status
+        const authEl = document.getElementById('stat-auth');
+        if (authEl) {
+          authEl.textContent = health.auth || 'disabled';
+          authEl.style.color = health.auth === 'enabled'
+            ? 'var(--green)'
+            : 'var(--text-muted)';
         }
 
         // Update version
@@ -605,6 +678,22 @@ docker compose up
           } else {
             usersEl.textContent = '—';
             usersEl.style.color = 'var(--text-muted)';
+          }
+        }
+
+        // Update posts count (only if DB is healthy)
+        const postsEl = document.getElementById('stat-posts');
+        if (postsEl) {
+          if (postsCountRes && postsCountRes.ok && health.database === 'healthy') {
+            try {
+              const countData = await postsCountRes.json();
+              postsEl.textContent = countData.count;
+            } catch {
+              postsEl.textContent = '?';
+            }
+          } else {
+            postsEl.textContent = '—';
+            postsEl.style.color = 'var(--text-muted)';
           }
         }
       } catch (e) {

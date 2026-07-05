@@ -10,12 +10,13 @@ members = [
     "crates/novax-observability",
     "crates/novax-orm",
     "crates/novax-migrate",
+    "crates/novax-auth",
     "crates/novax-cli",
     "apps/novax-app",
 ]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.88"
 license = "Apache-2.0 OR MIT"
@@ -27,16 +28,17 @@ readme = "README.md"
 
 [workspace.dependencies]
 # Internal crates
-novax = { path = "crates/novax", version = "0.2.0" }
-novax-macros = { path = "crates/novax-macros", version = "0.2.0" }
-novax-runtime = { path = "crates/novax-runtime", version = "0.2.0" }
-novax-router = { path = "crates/novax-router", version = "0.2.0" }
-novax-network = { path = "crates/novax-network", version = "0.2.0" }
-novax-storage = { path = "crates/novax-storage", version = "0.2.0" }
-novax-observability = { path = "crates/novax-observability", version = "0.2.0" }
-novax-orm = { path = "crates/novax-orm", version = "0.2.0" }
-novax-migrate = { path = "crates/novax-migrate", version = "0.2.0" }
-novax-cli = { path = "crates/novax-cli", version = "0.2.0" }
+novax = { path = "crates/novax", version = "0.3.0" }
+novax-macros = { path = "crates/novax-macros", version = "0.3.0" }
+novax-runtime = { path = "crates/novax-runtime", version = "0.3.0" }
+novax-router = { path = "crates/novax-router", version = "0.3.0" }
+novax-network = { path = "crates/novax-network", version = "0.3.0" }
+novax-storage = { path = "crates/novax-storage", version = "0.3.0" }
+novax-observability = { path = "crates/novax-observability", version = "0.3.0" }
+novax-orm = { path = "crates/novax-orm", version = "0.3.0" }
+novax-migrate = { path = "crates/novax-migrate", version = "0.3.0" }
+novax-auth = { path = "crates/novax-auth", version = "0.3.0" }
+novax-cli = { path = "crates/novax-cli", version = "0.3.0" }
 
 # External (justified dependencies — kept minimal)
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }

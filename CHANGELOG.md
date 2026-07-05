@@ -8,14 +8,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- SQLite backend for embedded use cases
-- MySQL backend
 - HTTP/3 + QUIC transport
 - Procedural macros for `#[route]` and `#[entity]` (full code generation)
 - UI DSL with WASM + WebGPU rendering
 - Compile-time security checks (SQLi/XSS/CSRF detection)
 - Plugin system with WASM sandbox
 - Hot reload for development
+
+## [0.3.0] — 2026-07-05
+
+### Added
+- **Authentication crate (`novax-auth`)** — full auth system
+  - Argon2id password hashing (industry standard, memory-hard)
+  - JWT tokens (HMAC-SHA256) with constant-time signature comparison
+  - Refresh tokens stored in PostgreSQL for revocation
+  - `AuthService` with: `register`, `login`, `logout`, `user_from_token`, `change_password`
+  - Password strength validation (min 8 chars)
+  - Session table with `revoked_at` for soft revocation
+  - User enumeration prevention (same error for wrong email/password)
+- **Auth API endpoints**
+  - `POST /auth/register` — create a new account (public)
+  - `POST /auth/login` — authenticate and receive JWT (public)
+  - `GET /auth/me` — get current user (protected)
+  - `POST /auth/logout` — revoke all sessions (protected)
+  - `POST /auth/change-password` — change password with current verification (protected)
+- **Auth middleware** (`require_auth`)
+  - Extracts Bearer token from Authorization header
+  - Verifies JWT signature and expiration
+  - Loads user from DB and injects `AuthContext` into request extensions
+  - Returns proper 401 errors for missing/invalid/expired tokens
+- **Posts CRUD API** — full REST with FK relations
+  - `GET /api/posts?page=1&per_page=20` — paginated list
+  - `POST /api/posts` — create (with author_id FK validation)
+  - `GET /api/posts/:id` — fetch (auto-increments view_count)
+  - `PATCH /api/posts/:id` — update (auto-sets published_at on first publish)
+  - `DELETE /api/posts/:id` — delete
+  - `GET /api/posts/count` — total count
+  - `GET /api/users/:id/posts` — list posts by a specific user
+- **Migration #003**: auth_sessions table + password_hash column
+  - `auth_sessions` table with refresh_token, expires_at, revoked_at
+  - `password_hash` column added to users table
+- **Database exclusivity**: PostgreSQL is now the only supported relational backend.
+  SQLite and MySQL are no longer planned (see ROADMAP.md).
+- **Dashboard enhancements**
+  - Auth status indicator (enabled/disabled)
+  - Updated features list with auth + posts
+  - Updated API endpoints list
+
+### Changed
+- Bumped workspace version 0.2.2 → 0.3.0
+- `App` now supports `.with_auth(AuthConfig)` for auth configuration
+- `AppState` holds `Option<Arc<AuthService>>` for optional auth
+- `/api/health` now returns `auth: "enabled"|"disabled"`
+- `/api/info` now includes `auth_enabled` flag and updated features list
+- `docker-compose.yml` now passes `JWT_SECRET` environment variable
+- Migration #001 unchanged (preserves backwards compatibility)
+
+### Security
+- **Argon2id** for password hashing (resistant to GPU/ASIC attacks)
+- **Constant-time** password and token signature comparison (prevents timing attacks)
+- **JWT tokens** with expiration (1h access, 30d refresh)
+- **Session revocation** via DB-backed refresh tokens
+- **No user enumeration** (login returns same error for wrong email/password)
+- **Password strength** validation enforced at registration
 
 ## [0.2.2] — 2026-07-05
 

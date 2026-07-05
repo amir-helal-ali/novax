@@ -19,6 +19,7 @@ novax-observability = { workspace = true }
 novax-macros = { workspace = true }
 novax-orm = { workspace = true }
 novax-migrate = { workspace = true }
+novax-auth = { workspace = true }
 
 tokio = { workspace = true }
 axum = { workspace = true }

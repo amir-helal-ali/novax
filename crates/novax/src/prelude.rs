@@ -7,6 +7,10 @@ pub use crate::{
     version,
 };
 
+pub use novax_auth::{
+    self, AuthConfig, AuthError, AuthService, AuthSession, AuthUser, Claims,
+    extract_bearer_token,
+};
 pub use novax_macros::{entity, main, route};
 pub use novax_migrate::{self, Migration, MigrationError, MigrationReport, MigrationRunner};
 pub use novax_network;

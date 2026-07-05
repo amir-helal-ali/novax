@@ -26,17 +26,18 @@ NovaX aims to be a **production-ready, enterprise-grade platform** that combines
 
 ### v0.2.0 — Storage & Migrations (Q3 2026)
 
-**Goal:** Production-grade data persistence.
+**Goal:** Production-grade data persistence with PostgreSQL as the primary backend.
 
-- [ ] PostgreSQL backend with connection pooling
-- [ ] SQLite backend for embedded use cases
-- [ ] MySQL backend
-- [ ] Redis backend for caching
-- [ ] ORM with strongly-typed queries (`query!` macro)
-- [ ] Automatic migration generation from `#[entity]` macro
-- [ ] Migration runner with rollback support
-- [ ] Transaction support with optimistic concurrency
-- [ ] Multi-tier caching (L1 in-process, L2 Redis, L3 DB)
+- [x] PostgreSQL backend with connection pooling
+- [x] ORM with strongly-typed queries (Repository pattern)
+- [x] Migration engine with rollback support
+- [x] Transaction support
+- [ ] Multi-tier caching (L1 in-process, L2 Redis, L3 PostgreSQL)
+- [ ] PostgreSQL advanced features: full-text search, JSON columns, listen/notify
+
+> **Note:** SQLite and MySQL backends are not planned. NovaX targets
+> PostgreSQL exclusively for relational data, keeping the platform focused
+> and leveraging PostgreSQL-specific features (JSONB, arrays, FTS, etc.).
 
 ### v0.3.0 — Security & HTTP/3 (Q4 2026)
 

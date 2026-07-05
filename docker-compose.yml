@@ -22,6 +22,7 @@ services:
       - NOVAX_ENV=production
       - DATABASE_URL=postgres://novax:novax@postgres:5432/novax
       - DB_MAX_CONNECTIONS=10
+      - JWT_SECRET=novax_dev_secret_change_in_production_please_use_a_long_random_string
     depends_on:
       postgres:
         condition: service_healthy
