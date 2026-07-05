@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NovaX — منصة الويب المتكاملة بلغة Rust</title>
+  <title>NovaX v0.2 — منصة الويب المتكاملة بلغة Rust</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -264,6 +264,9 @@
     }
     .method.get { background: rgba(81, 143, 102, 0.2); color: var(--green); }
     .method.post { background: rgba(199, 154, 58, 0.2); color: var(--accent-bright); }
+    .method.delete { background: rgba(170, 82, 74, 0.2); color: var(--red); }
+    .method.patch { background: rgba(74, 110, 141, 0.2); color: #6c9bd2; }
+    .method.put { background: rgba(74, 110, 141, 0.2); color: #6c9bd2; }
     .path {
       color: var(--text);
     }
@@ -328,7 +331,7 @@
         <div class="header-meta">
           <span class="status-badge">
             <span class="status-dot"></span>
-            <span>Live · v0.1.0</span>
+            <span>Live · v0.2.0</span>
           </span>
           <span>Rust + WebAssembly</span>
         </div>
@@ -356,7 +359,15 @@
   <section class="container">
     <div class="stats">
       <div class="stat-card">
-        <div class="stat-value" id="stat-version">v0.1.0</div>
+        <div class="stat-value" id="stat-users">—</div>
+        <div class="stat-label">مستخدم في DB</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-db">—</div>
+        <div class="stat-label">حالة DB</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-version">v0.2.0</div>
         <div class="stat-label">الإصدار الحالي</div>
       </div>
       <div class="stat-card">
@@ -441,7 +452,7 @@
         <div class="endpoint">
           <span class="method get">GET</span>
           <span class="path">/api/health</span>
-          <span class="desc">فحص صحة النظام</span>
+          <span class="desc">فحص صحة النظام + حالة DB</span>
         </div>
         <div class="endpoint">
           <span class="method get">GET</span>
@@ -457,6 +468,36 @@
           <span class="method get">GET</span>
           <span class="path">/api/metrics</span>
           <span class="desc">Prometheus metrics</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/users?page=1&per_page=20</span>
+          <span class="desc">قائمة المستخدمين (مع pagination)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method post">POST</span>
+          <span class="path">/api/users</span>
+          <span class="desc">إنشاء مستخدم جديد</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/users/:id</span>
+          <span class="desc">عرض مستخدم</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">PATCH</span>
+          <span class="path">/api/users/:id</span>
+          <span class="desc">تعديل مستخدم</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">DELETE</span>
+          <span class="path">/api/users/:id</span>
+          <span class="desc">حذف مستخدم</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/users/count</span>
+          <span class="desc">عدد المستخدمين الكلي</span>
         </div>
       </div>
     </div>
@@ -513,7 +554,7 @@ docker compose up
   <footer>
     <div class="container">
       <p>
-        NovaX v0.1.0 · مفتوح المصدر تحت رخصة Apache-2.0 / MIT ·
+        NovaX v0.2.0 · مفتوح المصدر تحت رخصة Apache-2.0 / MIT ·
         <a href="https://github.com/amir-helal-ali/novax">GitHub</a> ·
         <a href="/api/info">API</a> ·
         <a href="/api/health">Health</a>
@@ -525,24 +566,54 @@ docker compose up
   </footer>
 
   <script>
-    // Fetch live health status
-    async function checkHealth() {
+    // Fetch live health status and DB info
+    async function refreshStats() {
       try {
-        const res = await fetch('/api/health');
-        const data = await res.json();
-        console.log('NovaX health:', data);
+        const [healthRes, usersCountRes] = await Promise.all([
+          fetch('/api/health'),
+          fetch('/api/users/count').catch(() => null)
+        ]);
 
-        const uptimeEl = document.querySelector('.stats .stat-card:nth-child(1) .stat-value');
-        if (uptimeEl && data.version) {
-          uptimeEl.textContent = 'v' + data.version;
+        const health = await healthRes.json();
+        console.log('NovaX health:', health);
+
+        // Update DB status
+        const dbEl = document.getElementById('stat-db');
+        if (dbEl) {
+          dbEl.textContent = health.database || 'disabled';
+          dbEl.style.color = health.database === 'healthy'
+            ? 'var(--green)'
+            : (health.database === 'disabled' ? 'var(--text-muted)' : 'var(--red)');
+        }
+
+        // Update version
+        const vEl = document.getElementById('stat-version');
+        if (vEl && health.version) {
+          vEl.textContent = 'v' + health.version;
+        }
+
+        // Update users count (only if DB is healthy)
+        const usersEl = document.getElementById('stat-users');
+        if (usersEl) {
+          if (usersCountRes && usersCountRes.ok && health.database === 'healthy') {
+            try {
+              const countData = await usersCountRes.json();
+              usersEl.textContent = countData.count;
+            } catch {
+              usersEl.textContent = '?';
+            }
+          } else {
+            usersEl.textContent = '—';
+            usersEl.style.color = 'var(--text-muted)';
+          }
         }
       } catch (e) {
-        console.error('Health check failed:', e);
+        console.error('Stats refresh failed:', e);
       }
     }
 
-    checkHealth();
-    setInterval(checkHealth, 30000);  // every 30s
+    refreshStats();
+    setInterval(refreshStats, 10000);  // every 10s
   </script>
 </body>
 </html>

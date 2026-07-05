@@ -1,24 +1,23 @@
 [package]
-name = "novax-storage"
+name = "novax-orm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "NovaX unified storage layer with multi-backend support"
+description = "NovaX ORM — strongly-typed database queries"
 repository.workspace = true
 
 [features]
-default = ["memory"]
-memory = []
-postgres = ["dep:sqlx"]
+default = ["postgres"]
+postgres = ["novax-storage/postgres", "dep:sqlx"]
 
 [dependencies]
-novax-observability = { workspace = true }
+novax-storage = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-parking_lot = { workspace = true }
 tokio = { workspace = true }
 sqlx = { workspace = true, optional = true }
 chrono = { workspace = true }

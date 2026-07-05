@@ -14,9 +14,11 @@ readme.workspace = true
 novax-runtime = { workspace = true }
 novax-router = { workspace = true }
 novax-network = { workspace = true }
-novax-storage = { workspace = true }
+novax-storage = { workspace = true, features = ["postgres"] }
 novax-observability = { workspace = true }
 novax-macros = { workspace = true }
+novax-orm = { workspace = true }
+novax-migrate = { workspace = true }
 
 tokio = { workspace = true }
 axum = { workspace = true }
@@ -28,3 +30,6 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 parking_lot = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

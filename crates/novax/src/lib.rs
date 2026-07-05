@@ -16,14 +16,17 @@
 //! ```
 
 pub use novax_macros::{entity, main, route};
+pub use novax_migrate as migrate;
 pub use novax_network as network;
 pub use novax_observability as observability;
+pub use novax_orm as orm;
 pub use novax_router as router;
 pub use novax_runtime as runtime;
 pub use novax_storage as storage;
 
 pub mod app;
 pub mod config;
+pub mod db;
 pub mod prelude;
 
 /// Get the NovaX version

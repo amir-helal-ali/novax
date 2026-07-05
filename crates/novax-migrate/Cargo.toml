@@ -1,25 +1,20 @@
 [package]
-name = "novax-storage"
+name = "novax-migrate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "NovaX unified storage layer with multi-backend support"
+description = "NovaX migration engine with rollback support"
 repository.workspace = true
 
 [features]
-default = ["memory"]
-memory = []
+default = ["postgres"]
 postgres = ["dep:sqlx"]
 
 [dependencies]
-novax-observability = { workspace = true }
 async-trait = { workspace = true }
-serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-parking_lot = { workspace = true }
 tokio = { workspace = true }
 sqlx = { workspace = true, optional = true }
 chrono = { workspace = true }
-uuid = { workspace = true }

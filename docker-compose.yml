@@ -20,13 +20,17 @@ services:
       - HOST=0.0.0.0
       - PORT=3000
       - NOVAX_ENV=production
-      # - DATABASE_URL=postgres://novax:novax@postgres:5432/novax
+      - DATABASE_URL=postgres://novax:novax@postgres:5432/novax
+      - DB_MAX_CONNECTIONS=10
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
       interval: 10s
       timeout: 3s
-      retries: 3
+      retries: 5
       start_period: 30s
     logging:
       driver: "json-file"
@@ -34,23 +38,23 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Uncomment when DATABASE_URL is set above
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: novax-postgres
-  #   environment:
-  #     POSTGRES_USER: novax
-  #     POSTGRES_PASSWORD: novax
-  #     POSTGRES_DB: novax
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U novax"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 5
+  postgres:
+    image: postgres:16-alpine
+    container_name: novax-postgres
+    environment:
+      POSTGRES_USER: novax
+      POSTGRES_PASSWORD: novax
+      POSTGRES_DB: novax
+    ports:
+      - "5433:5432"  # Use 5433 on host to avoid conflict with egp-exchange
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novax"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_data:

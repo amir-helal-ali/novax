@@ -1,10 +1,17 @@
 //! NovaX Example Application
 //!
-//! This is a sample NovaX app showing how to use the platform.
+//! This is a sample NovaX app showing how to use the platform with PostgreSQL.
 //! Run with: `cargo run -p novax-app` or `docker compose up`.
+//!
+//! Environment variables:
+//! - HOST: bind host (default 0.0.0.0)
+//! - PORT: bind port (default 3000)
+//! - RUST_LOG: log level (default info)
+//! - DATABASE_URL: PostgreSQL connection string
+//!   (default postgres://novax:novax@localhost:5432/novax)
 
 use novax::prelude::*;
-use tracing::info;
+use tracing::{info, error};
 
 #[tokio::main]
 async fn main() {
@@ -13,8 +20,33 @@ async fn main() {
 
     info!("NovaX application starting (v{})", novax::version());
 
-    // Build the app with default configuration
-    let app = App::new();
+    // Database configuration from environment
+    let db_config = DatabaseConfig {
+        url: std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://novax:novax@localhost:5432/novax".to_string()),
+        max_connections: std::env::var("DB_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10),
+        min_connections: 1,
+        connect_timeout_seconds: 5,
+        idle_timeout_seconds: 600,
+        max_lifetime_seconds: 1800,
+    };
+
+    // Build the app with database
+    let app = App::new()
+        .with_database(db_config);
+
+    // Initialize (connect to DB + run migrations)
+    let app = match app.initialize().await {
+        Ok(app) => app,
+        Err(e) => {
+            error!("Failed to initialize app: {}", e);
+            error!("Continuing without database — user endpoints will return 503");
+            App::new()
+        }
+    };
 
     // Get bind address from environment or use default
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -25,7 +57,7 @@ async fn main() {
 
     // Run the server
     if let Err(e) = app.serve(&addr).await {
-        tracing::error!("Server error: {}", e);
+        error!("Server error: {}", e);
         std::process::exit(1);
     }
 }

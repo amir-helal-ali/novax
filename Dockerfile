@@ -21,6 +21,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 COPY apps/ ./apps/
 COPY static/ ./static/
+COPY migrations/ ./migrations/
 
 # Build the application in release mode
 # Use --locked to ensure Cargo.lock is respected (allows network for crate downloads)
@@ -48,6 +49,9 @@ COPY --from=builder /app/target/release/novax-app /app/novax-app
 # Copy static assets (for serving)
 COPY --from=builder /app/static /app/static
 
+# Copy migration files
+COPY --from=builder /app/migrations /app/migrations
+
 # Make binary executable
 RUN chmod +x /app/novax-app
 
@@ -61,10 +65,11 @@ EXPOSE 3000
 ENV RUST_LOG=info \
     HOST=0.0.0.0 \
     PORT=3000 \
-    NOVAX_ENV=production
+    NOVAX_ENV=production \
+    DATABASE_URL=postgres://novax:novax@postgres:5432/novax
 
 # Health check
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
     CMD curl -sf http://localhost:3000/api/health || exit 1
 
 # Run the application

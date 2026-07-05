@@ -19,22 +19,23 @@
 - **Built-in observability:** Logging, metrics, tracing — no external services required.
 - **Docker-ready:** One command to run the entire platform.
 
-## 📦 Current Status (v0.1.0)
-
-This is the **first scaffold release**. It includes:
+## 📦 Current Status (v0.2.0)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Workspace structure | ✅ Ready | 8 crates organized as Cargo workspace |
-| Runtime | ✅ Functional | Built on tokio (native NovaX scheduler planned for v0.2) |
+| Workspace structure | ✅ Ready | 10 crates as Cargo workspace |
+| Runtime | ✅ Functional | Built on tokio (native NovaX scheduler planned for v0.6) |
 | HTTP server | ✅ Functional | HTTP/1.1 + HTTP/2 via axum (HTTP/3 in v0.3) |
 | Router | ✅ Functional | Type-safe routes via axum |
-| Storage | ✅ Functional | In-memory backend (PostgreSQL/SQLite/MySQL in v0.2) |
-| Observability | ✅ Functional | Structured logging, metrics, health checks |
+| Storage | ✅ Functional | In-memory + **PostgreSQL** backends (SQLite/MySQL in v0.3) |
+| **ORM** | ✅ **New in v0.2** | `Entity` trait, `Repository<T>` with CRUD, pagination, transactions |
+| **Migration Engine** | ✅ **New in v0.2** | SQL files with `Up`/`Down` markers, rollback, destructive detection |
+| **Users CRUD API** | ✅ **New in v0.2** | Full REST example: list/create/get/update/delete |
+| Observability | ✅ Functional | Structured logging, metrics, health checks (now with DB status) |
 | Procedural Macros | 🚧 Skeleton | `#[novax::main]`, `#[novax::route]`, `#[novax::entity]` defined but minimal |
 | UI DSL | 📋 Planned | Rust DSL → WASM + WebGPU (v0.4) |
 | CLI | ✅ Functional | `novax new/build/run/test/serve/doctor/info` |
-| Docker | ✅ Ready | Multi-stage Dockerfile, dev + prod compose files |
+| Docker | ✅ Ready | Multi-stage Dockerfile + compose with PostgreSQL |
 | Security engine | 📋 Planned | Compile-time SQLi/XSS/CSRF detection (v0.3) |
 | Plugin system | 📋 Planned | WASM sandboxed plugins (v0.5) |
 
@@ -87,35 +88,53 @@ Once running, the following endpoints are available:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Dashboard (HTML) |
-| `GET` | `/api/health` | System health check (JSON) |
+| `GET` | `/api/health` | System health + DB status (JSON) |
 | `GET` | `/api/info` | Application info (JSON) |
 | `GET` | `/api/version` | Version string |
 | `GET` | `/api/metrics` | Prometheus metrics |
-| `GET` | `/static/*` | Static file serving |
+| `GET` | `/api/users?page=1&per_page=20` | List users (paginated) |
+| `POST` | `/api/users` | Create user |
+| `GET` | `/api/users/:id` | Get user by UUID |
+| `PATCH` | `/api/users/:id` | Update user |
+| `DELETE` | `/api/users/:id` | Delete user |
+| `GET` | `/api/users/count` | Total user count |
 
-### Example responses
+### Example: Working with the Users API
 
 ```bash
-# Health check
+# Create a user
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","name":"Alice"}'
+# → 201 Created
+# {"id":"abc-123","email":"alice@example.com","name":"Alice",...}
+
+# List users
+curl 'http://localhost:3000/api/users?page=1&per_page=10'
+# → {"items":[...],"total":1,"page":1,"per_page":10,"total_pages":1}
+
+# Get a specific user
+curl http://localhost:3000/api/users/abc-123
+
+# Update a user
+curl -X PATCH http://localhost:3000/api/users/abc-123 \
+  -H "Content-Type: application/json" \
+  -d '{"bio":"Rust developer"}'
+
+# Delete a user
+curl -X DELETE http://localhost:3000/api/users/abc-123
+# → 204 No Content
+```
+
+### Example: Health Check
+
+```bash
 $ curl http://localhost:3000/api/health
 {
   "status": "healthy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "uptime_seconds": 42,
-  "subsystems": [
-    {"status": "healthy", "subsystem": "runtime", ...},
-    {"status": "healthy", "subsystem": "network", ...},
-    {"status": "healthy", "subsystem": "router", ...}
-  ]
-}
-
-# App info
-$ curl http://localhost:3000/api/info
-{
-  "name": "NovaX",
-  "version": "0.1.0",
-  "description": "A next-generation full-stack web platform built entirely in Rust",
-  "features": ["Rust end-to-end", "HTTP/1.1 + HTTP/2", ...]
+  "database": "healthy"
 }
 ```
 
@@ -129,16 +148,19 @@ novax/
 │   ├── novax-runtime/         # Async runtime
 │   ├── novax-router/          # HTTP routing
 │   ├── novax-network/         # HTTP/WS/SSE networking
-│   ├── novax-storage/         # Storage abstraction
+│   ├── novax-storage/         # Storage abstraction (memory + postgres)
 │   ├── novax-observability/   # Logging, metrics, tracing
+│   ├── novax-orm/             # ORM: Entity trait, Repository<T>, pagination
+│   ├── novax-migrate/         # Migration engine with rollback
 │   └── novax-cli/             # `novax` command-line tool
 ├── apps/
-│   └── novax-app/             # Example application
-├── static/                    # Static web assets
+│   └── novax-app/             # Example application with Users CRUD
+├── migrations/                # SQL migration files (001_create_users.sql, etc.)
+├── static/                    # Static web assets (dashboard)
 ├── docs/                      # Documentation
 ├── .github/                   # CI/CD + issue templates
 ├── Dockerfile                 # Multi-stage Docker build
-├── docker-compose.yml         # Development compose
+├── docker-compose.yml         # Development compose (app + postgres)
 ├── docker-compose.production.yml  # Production compose
 ├── Cargo.toml                 # Workspace manifest
 └── README.md

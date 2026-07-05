@@ -1,7 +1,7 @@
 //! NovaX Storage
 //!
-//! Unified storage layer supporting PostgreSQL, SQLite, and MySQL.
-//! v0.1 provides connection pooling and basic CRUD operations.
+//! Unified storage layer supporting multiple backends.
+//! v0.2 adds PostgreSQL backend alongside the in-memory one.
 
 use std::time::Duration;
 
@@ -9,6 +9,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub mod memory;
+
+#[cfg(feature = "postgres")]
+pub mod postgres;
 
 /// Backend kind identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,14 +99,30 @@ pub enum StorageError {
 pub async fn create_storage(config: &StorageConfig) -> Result<Box<dyn Storage>, StorageError> {
     match config.backend {
         BackendKind::Memory => Ok(Box::new(memory::MemoryStorage::new())),
+        BackendKind::Postgres => {
+            #[cfg(feature = "postgres")]
+            {
+                let storage = postgres::PostgresStorage::with_config(
+                    &config.url,
+                    config.max_connections,
+                    config.min_connections,
+                    Duration::from_secs(config.connect_timeout_seconds),
+                )
+                .await?;
+                Ok(Box::new(storage))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                Err(StorageError::Config(
+                    "PostgreSQL backend requires 'postgres' feature".to_string(),
+                ))
+            }
+        }
         BackendKind::Sqlite => Err(StorageError::Config(
-            "SQLite backend not yet implemented in v0.1 scaffold".to_string(),
-        )),
-        BackendKind::Postgres => Err(StorageError::Config(
-            "PostgreSQL backend not yet implemented in v0.1 scaffold".to_string(),
+            "SQLite backend not yet implemented".to_string(),
         )),
         BackendKind::Mysql => Err(StorageError::Config(
-            "MySQL backend not yet implemented in v0.1 scaffold".to_string(),
+            "MySQL backend not yet implemented".to_string(),
         )),
     }
 }

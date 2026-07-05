@@ -8,14 +8,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Native NovaX async runtime (replace tokio dependency)
-- PostgreSQL, SQLite, MySQL storage backends
+- SQLite backend for embedded use cases
+- MySQL backend
 - HTTP/3 + QUIC transport
 - Procedural macros for `#[route]` and `#[entity]` (full code generation)
 - UI DSL with WASM + WebGPU rendering
 - Compile-time security checks (SQLi/XSS/CSRF detection)
 - Plugin system with WASM sandbox
 - Hot reload for development
+
+## [0.2.0] — 2026-07-05
+
+### Added
+- **PostgreSQL storage backend** (`novax-storage` with `postgres` feature)
+  - Connection pooling via sqlx
+  - KV-store table for `Storage` trait implementation
+  - TTL support, automatic expired entry cleanup
+  - Health checks
+- **NovaX ORM** (`novax-orm` crate)
+  - `Entity` trait for strongly-typed models
+  - `Repository<T>` with CRUD operations: `find_by_id`, `find_all`, `find_paginated`,
+    `count`, `exists`, `delete`, `begin`
+  - `Pagination` and `PaginatedResult<T>` types
+  - Transactional operations via `with_transaction`
+- **NovaX Migration Engine** (`novax-migrate` crate)
+  - SQL migration files with `-- +migrate Up` / `-- +migrate Down` markers
+  - Versioned migration tracking via `_novax_migrations` table
+  - Atomic migrations (each in a transaction)
+  - Rollback support (`rollback_last`)
+  - Destructive operation detection (DROP TABLE, TRUNCATE, etc.)
+  - `load_from_dir` for loading migrations from a directory
+- **Database integration in `novax-app`**
+  - Connects to PostgreSQL via `DATABASE_URL` env var
+  - Auto-runs migrations on startup from `./migrations` directory
+  - Graceful degradation: continues without DB if connection fails
+- **Users CRUD API** (full REST example)
+  - `GET /api/users?page=1&per_page=20` — paginated list
+  - `POST /api/users` — create (with email validation)
+  - `GET /api/users/:id` — fetch by UUID
+  - `PATCH /api/users/:id` — partial update
+  - `DELETE /api/users/:id` — remove
+  - `GET /api/users/count` — total count
+- **Initial migrations**
+  - `001_create_users.sql` — users table with email, name, bio, avatar, timestamps
+  - `002_create_posts.sql` — posts table with author FK, slug, body, published state
+- **PostgreSQL service in docker-compose.yml**
+  - postgres:16-alpine with healthcheck
+  - Persistent volume `postgres_data`
+  - Port 5433 on host (avoids conflict with existing services on 5432)
+- **Dashboard enhancements**
+  - Live DB status indicator (healthy/unhealthy/disabled)
+  - Live users count from database
+  - Updated API endpoints list with all CRUD routes
+  - Method badges for PATCH/DELETE with color coding
+
+### Changed
+- Bumped workspace version 0.1.1 → 0.2.0
+- `AppState` now holds `Option<PgPool>` for optional database access
+- `App::new()` no longer automatically serves — use `App::new().with_database(cfg).initialize().await`
+- `/api/health` now returns database status alongside system health
+- `/api/info` now includes `database_enabled` flag and updated features list
+- Added `sqlx` workspace dependency (with `postgres`, `uuid`, `chrono`, `macros`, `migrate` features)
+- Added `novax-orm` and `novax-migrate` to workspace members
+- README updated with v0.2 endpoints and features
+
+### Migration Guide (v0.1.x → v0.2.0)
+
+**Breaking change:** `App::new()` no longer auto-connects to DB.
+To use the database:
+
+```rust
+// Before (v0.1.x)
+let app = App::new();
+app.serve("0.0.0.0:3000").await?;
+
+// After (v0.2.0)
+let app = App::new()
+    .with_database(db_config)
+    .initialize()
+    .await?;
+app.serve("0.0.0.0:3000").await?;
+```
+
+If you don't need a database, `App::new()` still works (user endpoints return 503).
 
 ## [0.1.1] — 2026-07-05
 

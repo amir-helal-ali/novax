@@ -16,6 +16,10 @@ novax = { workspace = true }
 novax-runtime = { workspace = true }
 novax-observability = { workspace = true }
 novax-network = { workspace = true }
+novax-storage = { workspace = true, features = ["postgres"] }
+novax-orm = { workspace = true }
+novax-migrate = { workspace = true }
 
 tokio = { workspace = true }
 tracing = { workspace = true }
+sqlx = { workspace = true }
