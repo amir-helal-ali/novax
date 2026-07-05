@@ -17,6 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin system with WASM sandbox
 - Hot reload for development
 
+## [0.2.2] — 2026-07-05
+
+### Fixed
+- **Migration failure: "cannot insert multiple commands into a prepared statement"**.
+  PostgreSQL via `sqlx::query` does not support multi-statement prepared statements
+  (e.g. `CREATE TABLE ... ; CREATE INDEX ... ; CREATE INDEX ...`).
+  Migrations now use `sqlx::raw_sql()` which sends the SQL as a simple query
+  string, allowing multiple statements in a single migration file.
+
+  Symptom in logs:
+  ```
+  ERROR novax::app: Migration failed: database error: migration create_users v1
+  failed: cannot insert multiple commands into a prepared statement
+  ```
+
+  After this fix, migrations apply successfully and the database is initialized
+  on startup, enabling the `/api/users/*` endpoints.
+
 ## [0.2.1] — 2026-07-05
 
 ### Fixed

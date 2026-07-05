@@ -213,7 +213,9 @@ impl MigrationRunner {
             // Apply in a transaction
             let mut tx = self.pool.begin().await?;
             let apply_result: Result<(), MigrationError> = async {
-                sqlx::query(&migration.up_sql)
+                // Use raw_sql to support multi-statement SQL scripts
+                // (CREATE TABLE + CREATE INDEX + ... in one migration file)
+                sqlx::raw_sql(&migration.up_sql)
                     .execute(&mut *tx)
                     .await?;
 
@@ -281,7 +283,8 @@ impl MigrationRunner {
 
         let mut tx = self.pool.begin().await?;
         let rollback_result: Result<(), MigrationError> = async {
-            sqlx::query(&migration.down_sql)
+            // Use raw_sql for multi-statement support
+            sqlx::raw_sql(&migration.down_sql)
                 .execute(&mut *tx)
                 .await?;
 
