@@ -3,7 +3,8 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ─── Stage 1: Builder ───
-FROM rust:1.82-slim AS builder
+# Use Rust 1.85+ for edition 2024 support (required by recent clap_lex)
+FROM rust:1.85-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,7 +23,8 @@ COPY apps/ ./apps/
 COPY static/ ./static/
 
 # Build the application in release mode
-RUN cargo build --release --bin novax-app
+# Use --frozen to ensure Cargo.lock is respected
+RUN cargo build --release --frozen --bin novax-app
 
 # ─── Stage 2: Runtime (minimal image) ───
 FROM debian:bookworm-slim AS runtime

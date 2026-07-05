@@ -2,8 +2,6 @@
 # NovaX — Production docker-compose
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-version: "3.9"
-
 services:
   app:
     build:

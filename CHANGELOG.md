@@ -17,6 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin system with WASM sandbox
 - Hot reload for development
 
+## [0.1.1] — 2026-07-05
+
+### Fixed
+- **Docker build failure**: bumped Rust from 1.82 to 1.85 in Dockerfile.
+  Recent versions of `clap_lex` require Rust edition 2024, stabilized in Rust 1.85.
+- Removed obsolete `version: "3.9"` from `docker-compose.yml` and
+  `docker-compose.production.yml` (silences Docker Compose warning).
+- Updated CI workflow to pin Rust 1.85.
+- Updated README to reflect Rust 1.85+ requirement.
+
+### Changed
+- Added `rust-version = "1.85"` to workspace `Cargo.toml` for clear error messages
+  when building with an older toolchain.
+- Docker build now uses `cargo build --frozen` to ensure `Cargo.lock` is respected
+  in CI/production builds.
+
 ## [0.1.0] — 2026-07-05
 
 ### Added

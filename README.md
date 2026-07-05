@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/amir-helal-ali/novax/actions/workflows/ci.yml/badge.svg)](https://github.com/amir-helal-ali/novax/actions/workflows/ci.yml)
 [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.82%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 
 **NovaX** is a complete development platform that unifies backend, frontend, runtime, compiler, rendering engine, networking, deployment, observability, and tooling into one coherent ecosystem — written entirely in Rust.
@@ -58,7 +58,7 @@ Open your browser to **http://localhost:3000**
 ### Option 2: Local development
 
 ```bash
-# Prerequisites: Rust 1.82+ (https://rustup.rs)
+# Prerequisites: Rust 1.85+ (https://rustup.rs)
 
 # Clone
 git clone https://github.com/amir-helal-ali/novax.git
