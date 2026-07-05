@@ -23,8 +23,8 @@ COPY apps/ ./apps/
 COPY static/ ./static/
 
 # Build the application in release mode
-# Use --frozen to ensure Cargo.lock is respected
-RUN cargo build --release --frozen --bin novax-app
+# Use --locked to ensure Cargo.lock is respected (allows network for crate downloads)
+RUN cargo build --release --locked --bin novax-app
 
 # ─── Stage 2: Runtime (minimal image) ───
 FROM debian:bookworm-slim AS runtime

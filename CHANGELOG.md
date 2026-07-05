@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Docker build failure**: bumped Rust from 1.82 to 1.85 in Dockerfile.
   Recent versions of `clap_lex` require Rust edition 2024, stabilized in Rust 1.85.
+- **Docker build failure (v0.1.1 regression)**: replaced `--frozen` with `--locked`
+  in Dockerfile. `--frozen` blocks all network access (including downloading crates
+  from crates.io), causing the build to fail. `--locked` enforces the `Cargo.lock`
+  version pinning while still allowing crate downloads.
 - Removed obsolete `version: "3.9"` from `docker-compose.yml` and
   `docker-compose.production.yml` (silences Docker Compose warning).
 - Updated CI workflow to pin Rust 1.85.
@@ -30,8 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Added `rust-version = "1.85"` to workspace `Cargo.toml` for clear error messages
   when building with an older toolchain.
-- Docker build now uses `cargo build --frozen` to ensure `Cargo.lock` is respected
-  in CI/production builds.
+- Docker build now uses `cargo build --locked` to ensure `Cargo.lock` is respected
+  in CI/production builds while allowing crate downloads.
 
 ## [0.1.0] — 2026-07-05
 
