@@ -1,0 +1,48 @@
+# NovaX Configuration File
+#
+# This file is loaded by novax::config::NovaXConfig::load_from_file().
+# Environment variables take precedence over values in this file.
+
+[app]
+name = "NovaX App"
+environment = "development"  # development | production | test
+
+[server]
+bind_addr = "0.0.0.0:3000"
+workers = 0  # 0 = auto (number of CPUs)
+
+[router]
+enable_cors = true
+enable_compression = true
+enable_tracing = true
+max_body_size = 2097152  # 2 MB
+
+[storage]
+backend = "memory"  # memory | postgres | sqlite | mysql
+url = "memory://"
+max_connections = 10
+min_connections = 1
+connect_timeout_seconds = 5
+idle_timeout_seconds = 600
+
+[logging]
+level = "info"  # error | warn | info | debug | trace
+
+# ─────────────────────────────────────────────────────────
+# Production example (uncomment and adjust):
+# ─────────────────────────────────────────────────────────
+# [app]
+# name = "My NovaX App"
+# environment = "production"
+#
+# [server]
+# bind_addr = "0.0.0.0:3000"
+# workers = 8
+#
+# [storage]
+# backend = "postgres"
+# url = "postgres://user:pass@localhost:5432/myapp"
+# max_connections = 20
+#
+# [logging]
+# level = "warn"

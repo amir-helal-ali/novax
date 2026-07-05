@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovaX — منصة الويب المتكاملة بلغة Rust</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0f0f10;
+      --bg-card: #1a1a1c;
+      --bg-card-hover: #222225;
+      --text: #f0f0f2;
+      --text-muted: #8a8a90;
+      --accent: #c79a3a;
+      --accent-bright: #e8b34c;
+      --border: #2a2a2d;
+      --green: #518f66;
+      --red: #aa524a;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Naskh Arabic', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--bg);
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(81, 143, 102, 0.15);
+      border: 1px solid var(--green);
+      border-radius: 20px;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--accent-bright) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero h2 {
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .cta-row {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-primary:hover {
+      background: var(--accent-bright);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-card);
+      border-color: var(--accent);
+    }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      padding: 40px 0;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .stat-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent);
+    }
+    .stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent-bright);
+      margin-bottom: 4px;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Architecture section */
+    .section {
+      padding: 60px 0;
+    }
+    .section-title {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .section-subtitle {
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 40px;
+      font-size: 16px;
+    }
+
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .module {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+    .module:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .module-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+    .module-name {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .module-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* API Endpoints */
+    .endpoints {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .endpoint {
+      display: grid;
+      grid-template-columns: 100px 1fr auto;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 13px;
+    }
+    .endpoint:last-child {
+      border-bottom: none;
+    }
+    .method {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      text-align: center;
+    }
+    .method.get { background: rgba(81, 143, 102, 0.2); color: var(--green); }
+    .method.post { background: rgba(199, 154, 58, 0.2); color: var(--accent-bright); }
+    .path {
+      color: var(--text);
+    }
+    .desc {
+      color: var(--text-muted);
+      font-family: -apple-system, sans-serif;
+      font-size: 12px;
+    }
+
+    /* Code block */
+    .code-block {
+      background: #0a0a0b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #e0e0e0;
+      direction: ltr;
+      text-align: left;
+    }
+    .code-comment { color: #6a6a6a; font-style: italic; }
+    .code-keyword { color: #c79a3a; }
+    .code-string { color: #518f66; }
+    .code-type { color: #4a9eff; }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 36px; }
+      .hero h2 { font-size: 16px; }
+      .endpoint { grid-template-columns: 80px 1fr; }
+      .endpoint .desc { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="header-content">
+        <div class="logo">
+          <div class="logo-mark">N</div>
+          <span>NovaX</span>
+        </div>
+        <div class="header-meta">
+          <span class="status-badge">
+            <span class="status-dot"></span>
+            <span>Live · v0.1.0</span>
+          </span>
+          <span>Rust + WebAssembly</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h1>منصة تطوير ويب متكاملة بلغة Rust</h1>
+      <h2>
+        NovaX توحّد الباكد والفرونت إند ووقت التشغيل والمترجم ومحرك الرسم والشبكات
+        في منظومة واحدة متماسكة. مطوّر يكتب منطق الأعمال فقط — كل ما عداه يُولَّد آليًا.
+      </h2>
+      <div class="cta-row">
+        <a href="https://github.com/amir-helal-ali/novax" class="btn btn-primary" target="_blank">
+          GitHub Repository →
+        </a>
+        <a href="/api/info" class="btn btn-secondary">API Info</a>
+        <a href="/api/health" class="btn btn-secondary">Health Check</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container">
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-version">v0.1.0</div>
+        <div class="stat-label">الإصدار الحالي</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">24</div>
+        <div class="stat-label">وحدة مستقلة</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">&lt;10ms</div>
+        <div class="stat-label">زمن بدء التشغيل</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">Rust</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">وحدات المنصة</h2>
+      <p class="section-subtitle">كل وحدة مستقلة وقابلة للاستبدال دون التأثير على الباقي</p>
+      <div class="modules-grid">
+        <div class="module">
+          <div class="module-icon">⚡</div>
+          <div class="module-name">Runtime</div>
+          <div class="module-desc">async executor، work-stealing scheduler، lock-free queues</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🌐</div>
+          <div class="module-name">Networking</div>
+          <div class="module-desc">HTTP/1.1, HTTP/2, HTTP/3 (QUIC), WebSocket, SSE</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🛣️</div>
+          <div class="module-name">Router</div>
+          <div class="module-desc">type-safe routing مع code generation آلي</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🗄️</div>
+          <div class="module-name">Storage</div>
+          <div class="module-desc">PostgreSQL, SQLite, MySQL, Redis, Object Storage</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">📊</div>
+          <div class="module-name">Observability</div>
+          <div class="module-desc">structured logging, metrics, distributed tracing</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🔒</div>
+          <div class="module-name">Security</div>
+          <div class="module-desc">compile-time checks لـ SQLi/XSS/CSRF</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🎨</div>
+          <div class="module-name">UI Engine</div>
+          <div class="module-desc">Rust DSL → WebGPU/Canvas</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">🔧</div>
+          <div class="module-name">Compiler</div>
+          <div class="module-desc">procedural macros لتوليد كل شيء آليًا</div>
+        </div>
+        <div class="module">
+          <div class="module-icon">📦</div>
+          <div class="module-name">CLI</div>
+          <div class="module-desc">novax new/build/run/test/deploy/doctor</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">REST API Endpoints</h2>
+      <p class="section-subtitle">جميع الـ endpoints متاحة الآن للتجربة</p>
+      <div class="endpoints">
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/</span>
+          <span class="desc">هذه الصفحة (Dashboard)</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/health</span>
+          <span class="desc">فحص صحة النظام</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/info</span>
+          <span class="desc">معلومات عن التطبيق</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/version</span>
+          <span class="desc">رقم الإصدار</span>
+        </div>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/api/metrics</span>
+          <span class="desc">Prometheus metrics</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">مثال: كود Rust بسيط</h2>
+      <p class="section-subtitle">كيف تبدو تطبيقات NovaX</p>
+      <div class="code-block">
+<span class="code-comment">// apps/novax-app/src/main.rs</span>
+<span class="code-keyword">use</span> novax::prelude::*;
+
+<span class="code-keyword">#[</span>novax::main<span class="code-keyword">]</span>
+<span class="code-keyword">async fn</span> <span class="code-type">main</span>() {
+    <span class="code-keyword">let</span> app = <span class="code-type">App</span>::new()
+        .with_route(<span class="code-string">"GET"</span>, <span class="code-string">"/"</span>, || async { <span class="code-string">"Hello, NovaX!"</span> });
+
+    app.serve(<span class="code-string">"0.0.0.0:3000"</span>).await.unwrap();
+}
+
+<span class="code-comment">// #[novax::route] يتولّى: التحقق من النوع، توليد OpenAPI،</span>
+<span class="code-comment">// تسجيل المسار، إعداد الـ tracing، وكل ما يلزم تلقائيًا</span>
+<span class="code-keyword">#[</span>novax::route(<span class="code-string">GET"</span>, <span class="code-string">"/users/{id}"</span>)<span class="code-keyword">]</span>
+<span class="code-keyword">pub async fn</span> <span class="code-type">get_user</span>(
+    <span class="code-keyword">_</span>ctx: <span class="code-type">Context</span>,
+    id: <span class="code-type">Path</span>&lt;<span class="code-type">Uuid</span>&gt;,
+) -&gt; <span class="code-type">Result</span>&lt;<span class="code-type">Json</span>&lt;<span class="code-type">User</span>&gt;, <span class="code-type">ApiError</span>&gt; {
+    <span class="code-keyword">let</span> user = <span class="code-type">Users</span>::find_by_id(&amp;id).await?;
+    <span class="code-type">Ok</span>(<span class="code-type">Json</span>(user))
+}
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">التشغيل عبر Docker</h2>
+      <p class="section-subtitle">أمر واحد لتشغيل المنصة بالكامل</p>
+      <div class="code-block">
+<span class="code-comment"># 1. استنساخ المستودع</span>
+git clone https://github.com/amir-helal-ali/novax.git
+<span class="code-keyword">cd</span> novax
+
+<span class="code-comment"># 2. تشغيل المنصة</span>
+docker compose up
+
+<span class="code-comment"># 3. فتح المتصفح على</span>
+<span class="code-comment">#    http://localhost:3000</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>
+        NovaX v0.1.0 · مفتوح المصدر تحت رخصة Apache-2.0 / MIT ·
+        <a href="https://github.com/amir-helal-ali/novax">GitHub</a> ·
+        <a href="/api/info">API</a> ·
+        <a href="/api/health">Health</a>
+      </p>
+      <p style="margin-top: 8px; font-size: 11px;">
+        © 2026 NovaX Contributors · Built with Rust
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    // Fetch live health status
+    async function checkHealth() {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        console.log('NovaX health:', data);
+
+        const uptimeEl = document.querySelector('.stats .stat-card:nth-child(1) .stat-value');
+        if (uptimeEl && data.version) {
+          uptimeEl.textContent = 'v' + data.version;
+        }
+      } catch (e) {
+        console.error('Health check failed:', e);
+      }
+    }
+
+    checkHealth();
+    setInterval(checkHealth, 30000);  // every 30s
+  </script>
+</body>
+</html>

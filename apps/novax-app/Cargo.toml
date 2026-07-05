@@ -1,0 +1,21 @@
+[package]
+name = "novax-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Example NovaX application"
+repository.workspace = true
+
+[[bin]]
+name = "novax-app"
+path = "src/main.rs"
+
+[dependencies]
+novax = { workspace = true }
+novax-runtime = { workspace = true }
+novax-observability = { workspace = true }
+novax-network = { workspace = true }
+
+tokio = { workspace = true }
+tracing = { workspace = true }

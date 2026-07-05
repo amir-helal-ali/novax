@@ -1,0 +1,58 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# NovaX — Development docker-compose
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Usage:
+#   docker compose up         # start all services
+#   docker compose up --build # rebuild and start
+#   docker compose down       # stop all services
+
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: novax-app:latest
+    container_name: novax-app
+    ports:
+      - "3000:3000"
+    environment:
+      - RUST_LOG=info
+      - HOST=0.0.0.0
+      - PORT=3000
+      - NOVAX_ENV=production
+      # - DATABASE_URL=postgres://novax:novax@postgres:5432/novax
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Uncomment when DATABASE_URL is set above
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: novax-postgres
+  #   environment:
+  #     POSTGRES_USER: novax
+  #     POSTGRES_PASSWORD: novax
+  #     POSTGRES_DB: novax
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U novax"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 5
+
+# volumes:
+#   postgres_data:

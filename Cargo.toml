@@ -1,0 +1,67 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/novax",
+    "crates/novax-macros",
+    "crates/novax-runtime",
+    "crates/novax-router",
+    "crates/novax-network",
+    "crates/novax-storage",
+    "crates/novax-observability",
+    "crates/novax-cli",
+    "apps/novax-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+authors = ["NovaX Contributors"]
+repository = "https://github.com/amir-helal-ali/novax"
+homepage = "https://github.com/amir-helal-ali/novax"
+documentation = "https://docs.rs/novax"
+readme = "README.md"
+
+[workspace.dependencies]
+# Internal crates
+novax = { path = "crates/novax", version = "0.1.0" }
+novax-macros = { path = "crates/novax-macros", version = "0.1.0" }
+novax-runtime = { path = "crates/novax-runtime", version = "0.1.0" }
+novax-router = { path = "crates/novax-router", version = "0.1.0" }
+novax-network = { path = "crates/novax-network", version = "0.1.0" }
+novax-storage = { path = "crates/novax-storage", version = "0.1.0" }
+novax-observability = { path = "crates/novax-observability", version = "0.1.0" }
+novax-cli = { path = "crates/novax-cli", version = "0.1.0" }
+
+# External (justified dependencies — kept minimal)
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "http2", "json", "tokio", "macros", "query"] }
+tower = "0.5"
+tower-http = { version = "0.6", default-features = false, features = ["cors", "trace", "compression-gzip", "fs"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "json", "smallvec", "std"] }
+uuid = { version = "1.10", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+parking_lot = "0.12"
+once_cell = "1.20"
+dashmap = "6.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 2  # optimize dependencies even in dev for faster runtime

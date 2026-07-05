@@ -1,0 +1,36 @@
+# Build context
+target/
+**/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# CI
+.github/
+.gitlab-ci.yml
+
+# Docs (small files OK, but skip large PDFs)
+docs/**/*.pdf
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore

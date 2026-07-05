@@ -1,0 +1,30 @@
+[package]
+name = "novax"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "NovaX — a next-generation full-stack web platform built entirely in Rust"
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+novax-runtime = { workspace = true }
+novax-router = { workspace = true }
+novax-network = { workspace = true }
+novax-storage = { workspace = true }
+novax-observability = { workspace = true }
+novax-macros = { workspace = true }
+
+tokio = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }

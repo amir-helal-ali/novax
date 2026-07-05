@@ -1,0 +1,18 @@
+[package]
+name = "novax-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "NovaX HTTP router with type-safe route definitions"
+repository.workspace = true
+
+[dependencies]
+novax-observability = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
