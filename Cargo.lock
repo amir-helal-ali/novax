@@ -164,6 +164,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "rustversion",
@@ -497,6 +498,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "encoding_rs"
+version = "0.8.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -1158,8 +1168,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin",
+ "version_check",
+]
+
+[[package]]
 name = "novax"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1170,9 +1197,11 @@ dependencies = [
  "novax-network",
  "novax-observability",
  "novax-orm",
+ "novax-rate-limit",
  "novax-router",
  "novax-runtime",
  "novax-storage",
+ "novax-web",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1187,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "novax-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "novax",
  "novax-auth",
@@ -1195,8 +1224,10 @@ dependencies = [
  "novax-network",
  "novax-observability",
  "novax-orm",
+ "novax-rate-limit",
  "novax-runtime",
  "novax-storage",
+ "novax-web",
  "sqlx",
  "tokio",
  "tracing",
@@ -1204,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "novax-auth"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1227,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "novax-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1244,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "novax-macros"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1253,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "novax-migrate"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1265,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "novax-network"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "novax-observability",
@@ -1278,7 +1309,7 @@ dependencies = [
 
 [[package]]
 name = "novax-observability"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -1292,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "novax-orm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1307,8 +1338,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "novax-rate-limit"
+version = "0.4.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "dashmap",
+ "once_cell",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "novax-router"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1322,7 +1370,7 @@ dependencies = [
 
 [[package]]
 name = "novax-runtime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "parking_lot",
  "thiserror 1.0.69",
@@ -1332,7 +1380,7 @@ dependencies = [
 
 [[package]]
 name = "novax-storage"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1344,6 +1392,16 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "novax-web"
+version = "0.4.0"
+dependencies = [
+ "once_cell",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

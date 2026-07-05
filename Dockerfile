@@ -52,6 +52,9 @@ COPY --from=builder /app/static /app/static
 # Copy migration files
 COPY --from=builder /app/migrations /app/migrations
 
+# Create uploads directory (writable by novax user)
+RUN mkdir -p /app/uploads && chown -R novax:novax /app/uploads
+
 # Make binary executable
 RUN chmod +x /app/novax-app
 

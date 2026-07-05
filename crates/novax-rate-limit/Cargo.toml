@@ -1,0 +1,21 @@
+[package]
+name = "novax-rate-limit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "NovaX rate limiting middleware"
+repository.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+once_cell = { workspace = true }
+dashmap = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+axum = { workspace = true }

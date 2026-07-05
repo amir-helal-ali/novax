@@ -20,6 +20,8 @@ novax-macros = { workspace = true }
 novax-orm = { workspace = true }
 novax-migrate = { workspace = true }
 novax-auth = { workspace = true }
+novax-rate-limit = { workspace = true }
+novax-web = { workspace = true }
 
 tokio = { workspace = true }
 axum = { workspace = true }

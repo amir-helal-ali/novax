@@ -14,6 +14,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compile-time security checks (SQLi/XSS/CSRF detection)
 - Plugin system with WASM sandbox
 - Hot reload for development
+- OAuth2 full implementation (token exchange + user info fetch)
+- SMTP email sending (verification + reset links)
+
+## [0.4.0] — 2026-07-05
+
+### Added
+- **Rate Limiting** (new crate `novax-rate-limit`)
+  - Token bucket algorithm with per-IP tracking
+  - Configurable via env vars: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_WHITELIST`
+  - Automatic bucket cleanup (every 60s)
+  - Returns proper 429 with `Retry-After` header
+  - `RateLimitConfig::from_env()` helper
+  - Whitelist support (default: 127.0.0.1, ::1)
+- **Email Verification** (in `novax-auth`)
+  - `create_email_verification_token()` — generates 24h token
+  - `verify_email()` — verifies token + sets `email_verified_at`
+  - Dev mode: shows verification link directly in UI
+  - Production: ready for SMTP integration (TODO)
+  - New table `email_verification_tokens`
+- **Password Reset** (in `novax-auth`)
+  - `create_password_reset_token()` — generates 1h token
+  - `reset_password()` — verifies token + sets new password + revokes sessions
+  - User enumeration prevention (same response regardless of email existence)
+  - New table `password_reset_tokens`
+- **OAuth2 Scaffolding** (in `novax-auth`)
+  - `OAuthConfig` with Google + GitHub support
+  - Configurable via env vars: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_BASE`
+  - `build_auth_url()` for redirecting to provider
+  - CSRF state generation (`generate_state()`)
+  - New table `oauth_accounts` for linking providers to users
+  - Note: token exchange + user info fetch TODO (callback handler shows notice)
+- **File Uploads** (avatars)
+  - `POST /api/users/avatar` (multipart/form-data, protected)
+  - Max 2MB, image types only (png/jpg/jpeg/gif/webp)
+  - Stored in `/uploads/{user_id}.{ext}`
+  - User's `avatar_url` updated automatically
+  - Docker volume `uploads_data` for persistence
+- **Auth UI Pages** (new crate `novax-web`)
+  - All pages server-rendered HTML (no SPA framework)
+  - RTL Arabic with dark theme matching v0.3
+  - `/auth/login` — login form with OAuth buttons (if enabled)
+  - `/auth/register` — registration form
+  - `/auth/forgot-password` — request password reset
+  - `/auth/reset-password?token=X` — set new password
+  - `/auth/verify-email?token=X` — verify email
+  - All forms return helpful error messages in Arabic
+  - Cookie-based sessions (HttpOnly, SameSite=Lax)
+- **Admin Dashboard** (in `novax-web`)
+  - `/admin` — overview with stats (total/verified/active/admin users)
+  - `/admin/users` — paginated users list with actions
+  - `/admin/settings` — rate limit + OAuth configuration UI
+  - Admin-only access (403 for non-admins)
+  - User actions: toggle active, toggle admin, delete (with self-protection)
+  - Recent users table on dashboard
+  - Responsive sidebar navigation
+- **New User Fields**
+  - `bio` — user bio text
+  - `avatar_url` — profile picture URL
+  - `is_admin` — admin flag (default: false)
+  - `email_verified_at` — verification timestamp
+  - First registered user auto-promoted to admin (via DB trigger)
+
+### Removed
+- **Posts CRUD system** (per user request — focus on user management)
+  - Removed all `/api/posts/*` endpoints
+  - Removed migration #002 (create_posts)
+  - Posts code removed from `app.rs`
+  - Note: existing posts tables (if any) remain in DB but are unused
+
+### Changed
+- Bumped workspace version 0.3.0 → 0.4.0
+- `App` now supports `.with_rate_limiting()`, `.with_oauth()`, `.dev_mode()`
+- `AppState` holds `Option<RateLimiter>` and `Option<OAuthConfig>`
+- `AuthUser` now includes: `bio`, `avatar_url`, `is_admin`, `email_verified_at`
+- `require_auth` middleware now supports both Bearer token AND cookie-based sessions
+- Browser requests without auth → redirect to `/auth/login`
+- API requests without auth → 401 JSON error
+- `/api/health` now returns `rate_limiting` and `oauth` status
+- `/api/info` updated with new features list
+- `docker-compose.yml` adds rate limit + OAuth env vars and `uploads_data` volume
+- `Dockerfile` creates `/app/uploads` directory with proper ownership
+- Auth endpoints moved from `/auth/*` (JSON API) to `/auth/*` (HTML UI) + `/api/auth/*` (JSON API)
+
+### Security
+- Rate limiting protects all endpoints from abuse
+- Email verification required for new accounts (dev mode auto-shows link)
+- Password reset tokens expire in 1 hour
+- Email verification tokens expire in 24 hours
+- Used tokens cannot be reused
+- Password reset revokes all existing sessions
+- Admin self-protection: cannot delete self, cannot remove own admin status
+- Cookie-based sessions use HttpOnly + SameSite=Lax
+- OAuth state parameter for CSRF protection
 
 ## [0.3.0] — 2026-07-05
 

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "NovaX authentication: JWT, sessions, password hashing"
+description = "NovaX authentication: JWT, sessions, password hashing, OAuth, email verification"
 repository.workspace = true
 
 [features]

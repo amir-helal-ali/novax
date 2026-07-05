@@ -1,11 +1,15 @@
 //! NovaX Authentication
 //!
-//! Provides JWT-based authentication with PostgreSQL session storage.
+//! Provides JWT-based authentication with PostgreSQL session storage,
+//! email verification, password reset, and OAuth2 (Google + GitHub).
 //!
 //! ## Features
 //! - Password hashing with Argon2id (industry standard)
 //! - JWT tokens (HMAC-SHA256) for stateless auth
-//! - Optional session storage in PostgreSQL for revocation
+//! - Session storage in PostgreSQL for revocation
+//! - Email verification tokens
+//! - Password reset tokens
+//! - OAuth2: Google + GitHub
 //! - Constant-time password comparison
 //! - Secure defaults (no insecure algorithms)
 //!
@@ -37,6 +41,12 @@ use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
 use sqlx::PgPool;
+
+pub mod oauth;
+pub mod tokens;
+
+pub use oauth::{OAuthConfig, OAuthProvider, OAuthProviderConfig, OAuthUserInfo, build_auth_url, generate_state};
+pub use tokens::{EmailVerificationToken, PasswordResetToken};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -123,7 +133,11 @@ pub struct AuthUser {
     pub name: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
     pub is_active: bool,
+    pub is_admin: bool,
+    pub email_verified_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -290,7 +304,7 @@ impl AuthService {
         let user: AuthUser = sqlx::query_as(
             r#"INSERT INTO users (email, name, password_hash)
                VALUES ($1, $2, $3)
-               RETURNING id, email, name, password_hash, is_active, created_at, updated_at"#,
+               RETURNING id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at"#,
         )
         .bind(&email)
         .bind(name)
@@ -313,7 +327,7 @@ impl AuthService {
         let email = email.to_lowercase();
 
         let user: AuthUser = sqlx::query_as(
-            "SELECT id, email, name, password_hash, is_active, created_at, updated_at FROM users WHERE email = $1",
+            "SELECT id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at FROM users WHERE email = $1",
         )
         .bind(&email)
         .fetch_optional(pool)
@@ -366,7 +380,7 @@ impl AuthService {
             .map_err(|_| AuthError::InvalidToken)?;
 
         let user: AuthUser = sqlx::query_as(
-            "SELECT id, email, name, password_hash, is_active, created_at, updated_at FROM users WHERE id = $1 AND is_active = TRUE",
+            "SELECT id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at FROM users WHERE id = $1 AND is_active = TRUE",
         )
         .bind(user_id)
         .fetch_optional(pool)
@@ -399,7 +413,7 @@ impl AuthService {
         Self::validate_password_strength(new_password)?;
 
         let user: AuthUser = sqlx::query_as(
-            "SELECT id, email, name, password_hash, is_active, created_at, updated_at FROM users WHERE id = $1",
+            "SELECT id, email, name, password_hash, bio, avatar_url, is_active, is_admin, email_verified_at, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(user_id)
         .fetch_optional(pool)
@@ -475,7 +489,11 @@ mod tests {
             email: "test@example.com".to_string(),
             name: "Test".to_string(),
             password_hash: String::new(),
+            bio: None,
+            avatar_url: None,
             is_active: true,
+            is_admin: false,
+            email_verified_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
