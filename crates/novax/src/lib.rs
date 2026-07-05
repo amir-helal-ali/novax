@@ -25,6 +25,7 @@ pub use novax_orm as orm;
 pub use novax_rate_limit as rate_limit;
 pub use novax_router as router;
 pub use novax_runtime as runtime;
+pub use novax_seo as seo;
 pub use novax_storage as storage;
 pub use novax_web as web;
 

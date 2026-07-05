@@ -1312,7 +1312,7 @@ dependencies = [
 
 [[package]]
 name = "novax"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1327,6 +1327,7 @@ dependencies = [
  "novax-rate-limit",
  "novax-router",
  "novax-runtime",
+ "novax-seo",
  "novax-storage",
  "novax-web",
  "parking_lot",
@@ -1344,7 +1345,7 @@ dependencies = [
 
 [[package]]
 name = "novax-app"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "novax",
  "novax-auth",
@@ -1355,6 +1356,7 @@ dependencies = [
  "novax-orm",
  "novax-rate-limit",
  "novax-runtime",
+ "novax-seo",
  "novax-storage",
  "novax-web",
  "sqlx",
@@ -1364,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "novax-auth"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1387,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "novax-cli"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1404,7 +1406,7 @@ dependencies = [
 
 [[package]]
 name = "novax-macros"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1413,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "novax-mail"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "lettre",
@@ -1426,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "novax-migrate"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1438,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "novax-network"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "axum",
  "novax-observability",
@@ -1451,7 +1453,7 @@ dependencies = [
 
 [[package]]
 name = "novax-observability"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -1465,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "novax-orm"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1481,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "novax-rate-limit"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1498,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "novax-router"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1512,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "novax-runtime"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "parking_lot",
  "thiserror 1.0.69",
@@ -1521,8 +1523,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "novax-seo"
+version = "0.5.0"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "novax-storage"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1538,10 +1550,11 @@ dependencies = [
 
 [[package]]
 name = "novax-web"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "novax-auth",
+ "novax-seo",
  "once_cell",
  "serde",
  "serde_json",

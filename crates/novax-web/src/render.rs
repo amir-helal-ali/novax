@@ -1,6 +1,7 @@
 //! Page renderers for NovaX web UI
 
 use crate::templates::BASE_LAYOUT;
+use novax_seo::{SeoConfig, SeoMeta, render_head, website_structured_data, organization_structured_data};
 
 /// Simple template substitution: replaces {{KEY}} with value
 fn render(template: &str, vars: &[(&str, &str)]) -> String {
@@ -11,15 +12,46 @@ fn render(template: &str, vars: &[(&str, &str)]) -> String {
     result
 }
 
-/// Wrap content in the base layout and return HTML
+/// Global SEO config (lazy-initialized)
+static SEO_CONFIG: once_cell::sync::Lazy<SeoConfig> = once_cell::sync::Lazy::new(SeoConfig::default);
+
+/// Wrap content in the base layout with SEO and return HTML
 pub fn page(title: &str, content: &str) -> String {
-    render(BASE_LAYOUT, &[("TITLE", title), ("CONTENT", content)])
+    page_with_seo(title, content, None)
+}
+
+/// Wrap content with custom SEO metadata
+pub fn page_with_seo(title: &str, content: &str, seo: Option<SeoMeta>) -> String {
+    let meta = seo.unwrap_or_else(|| default_seo_meta(title));
+    let seo_head = render_head(&meta, &SEO_CONFIG);
+    render(BASE_LAYOUT, &[
+        ("TITLE", &format!("{} — {}", meta.title, SEO_CONFIG.site_name)),
+        ("SEO_HEAD", &seo_head),
+        ("CONTENT", content),
+    ])
+}
+
+/// Default SEO metadata for a page
+fn default_seo_meta(title: &str) -> SeoMeta {
+    SeoMeta::new(title)
+        .description(&SEO_CONFIG.default_description)
+        .structured_data(website_structured_data(&SEO_CONFIG))
+        .structured_data(organization_structured_data(&SEO_CONFIG))
 }
 
 // ─── Auth Pages ───
 
 /// Login page
 pub fn login_page(error: Option<&str>, oauth_enabled: bool) -> String {
+    page_with_seo("تسجيل الدخول", &login_content(error, oauth_enabled), Some(
+        SeoMeta::new("تسجيل الدخول")
+            .description("سجل الدخول إلى حسابك في NovaX")
+            .canonical("/auth/login")
+            .noindex()
+    ))
+}
+
+fn login_content(error: Option<&str>, oauth_enabled: bool) -> String {
     let error_html = error
         .map(|e| format!(r#"<div class="alert alert-error">{}</div>"#, e))
         .unwrap_or_default();
@@ -67,7 +99,7 @@ pub fn login_page(error: Option<&str>, oauth_enabled: bool) -> String {
         oauth_html = oauth_html,
     );
 
-    page("تسجيل الدخول", &content)
+    content
 }
 
 /// Register page
@@ -120,7 +152,13 @@ pub fn register_page(error: Option<&str>, oauth_enabled: bool) -> String {
         oauth_html = oauth_html,
     );
 
-    page("إنشاء حساب", &content)
+    page_with_seo("إنشاء حساب", &content, Some(
+        SeoMeta::new("إنشاء حساب")
+            .description("أنشئ حساباً مجانياً في NovaX — منصة تطوير ويب بلغة Rust")
+            .canonical("/auth/register")
+            .keywords(vec!["تسجيل".to_string(), "حساب جديد".to_string(), "NovaX".to_string()])
+            .structured_data(website_structured_data(&SEO_CONFIG))
+    ))
 }
 
 /// Forgot password page
@@ -164,7 +202,12 @@ pub fn forgot_password_page(error: Option<&str>, success: bool) -> String {
         form_html = form_html,
     );
 
-    page("نسيت كلمة المرور", &content)
+    page_with_seo("نسيت كلمة المرور", &content, Some(
+        SeoMeta::new("نسيت كلمة المرور")
+            .description("استعادة كلمة المرور الخاصة بحسابك في NovaX")
+            .canonical("/auth/forgot-password")
+            .noindex()
+    ))
 }
 
 /// Reset password page
@@ -209,7 +252,11 @@ pub fn reset_password_page(token: &str, error: Option<&str>, success: bool) -> S
         form_html = form_html,
     );
 
-    page("استعادة كلمة المرور", &content)
+    page_with_seo("استعادة كلمة المرور", &content, Some(
+        SeoMeta::new("استعادة كلمة المرور")
+            .canonical("/auth/reset-password")
+            .noindex()
+    ))
 }
 
 /// Email verification page
@@ -243,7 +290,11 @@ pub fn verify_email_page(success: bool, error: Option<&str>) -> String {
             err = err,
         )
     };
-    page("التحقق من البريد", &content)
+    page_with_seo("التحقق من البريد", &content, Some(
+        SeoMeta::new("التحقق من البريد")
+            .canonical("/auth/verify-email")
+            .noindex()
+    ))
 }
 
 /// Email verification notice (after register)
@@ -276,7 +327,11 @@ pub fn verification_notice_page(email: &str, dev_token: Option<&str>) -> String 
         email = email,
         dev_token_html = dev_token_html,
     );
-    page("تحقق من بريدك", &content)
+    page_with_seo("تحقق من بريدك", &content, Some(
+        SeoMeta::new("تحقق من بريدك")
+            .canonical("/auth/register")
+            .noindex()
+    ))
 }
 
 // ─── Admin Dashboard Pages ───
@@ -333,7 +388,11 @@ pub fn admin_dashboard(user_email: &str, user_initial: char, stats: &DashboardSt
         recent_users_rows = stats.recent_users_rows,
     );
 
-    page("لوحة التحكم", &content)
+    page_with_seo("لوحة التحكم", &content, Some(
+        SeoMeta::new("لوحة التحكم")
+            .canonical("/admin")
+            .noindex()
+    ))
 }
 
 /// Admin users list page
@@ -397,7 +456,11 @@ pub fn admin_users_page(
         pagination = pagination,
     );
 
-    page("المستخدمون", &content)
+    page_with_seo("المستخدمون", &content, Some(
+        SeoMeta::new("المستخدمون")
+            .canonical("/admin/users")
+            .noindex()
+    ))
 }
 
 /// Admin settings page
@@ -499,7 +562,11 @@ pub fn admin_settings_page(
         gh_value = if github_enabled { "true" } else { "false" },
     );
 
-    page("الإعدادات", &content)
+    page_with_seo("الإعدادات", &content, Some(
+        SeoMeta::new("الإعدادات")
+            .canonical("/admin/settings")
+            .noindex()
+    ))
 }
 
 // ─── Helpers ───
@@ -642,7 +709,11 @@ pub fn profile_page(
         bio = user.bio.as_deref().unwrap_or(""),
     );
 
-    page("ملفي الشخصي", &content)
+    page_with_seo("ملفي الشخصي", &content, Some(
+        SeoMeta::new("ملفي الشخصي")
+            .canonical("/profile")
+            .noindex()
+    ))
 }
 
 /// Admin user edit page
@@ -759,5 +830,9 @@ pub fn admin_user_edit_page(
         },
     );
 
-    page("تعديل مستخدم", &content)
+    page_with_seo("تعديل مستخدم", &content, Some(
+        SeoMeta::new("تعديل مستخدم")
+            .canonical("/admin/users")
+            .noindex()
+    ))
 }

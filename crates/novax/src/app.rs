@@ -29,6 +29,7 @@ use novax_mail::{MailConfig, MailService};
 use novax_network::{ServerConfig, serve, ServerError};
 use novax_rate_limit::{RateLimiter, RateLimitConfig, spawn_cleanup_task};
 use novax_router::{RouterConfig, with_defaults};
+use novax_seo::{generate_robots_txt, generate_sitemap, generate_manifest, default_sitemap, SeoConfig};
 use novax_web::render::*;
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
@@ -212,6 +213,10 @@ fn build_router(state: AppState) -> Router {
         // Core API
         .route("/", get(dashboard_root))
         .route("/api/health", get(api_health_handler))
+        // SEO endpoints
+        .route("/sitemap.xml", get(sitemap_handler))
+        .route("/robots.txt", get(robots_handler))
+        .route("/manifest.json", get(manifest_handler))
         .route("/api/info", get(api_info_handler))
         .route("/api/version", get(api_version_handler))
         .route("/api/metrics", get(metrics_handler));
@@ -431,6 +436,36 @@ async fn api_version_handler() -> &'static str { env!("CARGO_PKG_VERSION") }
 
 async fn metrics_handler() -> String {
     novax_observability::REGISTRY.export_prometheus()
+}
+
+// ─── SEO Handlers ───
+
+/// GET /sitemap.xml — XML sitemap for search engines
+async fn sitemap_handler() -> impl IntoResponse {
+    let config = SeoConfig::default();
+    let urls = default_sitemap(&config.site_url);
+    let xml = generate_sitemap(&config.site_url, &urls);
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/xml; charset=utf-8")],
+        xml,
+    )
+}
+
+/// GET /robots.txt — robots.txt for crawlers
+async fn robots_handler() -> impl IntoResponse {
+    let config = SeoConfig::default();
+    let txt = generate_robots_txt(&config.site_url);
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        txt,
+    )
+}
+
+/// GET /manifest.json — PWA manifest
+async fn manifest_handler() -> impl IntoResponse {
+    let config = SeoConfig::default();
+    let manifest = generate_manifest(&config);
+    Json(manifest)
 }
 
 // ─── Handlers: Auth UI Pages ───

@@ -25,6 +25,7 @@ pub use novax_router::{
     error_response, get, json_response, post,
 };
 pub use novax_runtime::{self, block_on, build, build_default, spawn, spawn_task};
+pub use novax_seo::{self, SeoConfig, SeoMeta, SitemapUrl, generate_sitemap, generate_robots_txt, generate_manifest, default_sitemap, render_head, website_structured_data, organization_structured_data, breadcrumb_structured_data};
 pub use novax_storage::{self, BackendKind, Storage, StorageConfig, StorageError};
 pub use novax_web::render;
 
