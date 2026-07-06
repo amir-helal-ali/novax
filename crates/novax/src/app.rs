@@ -35,6 +35,7 @@ use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfi
 use novax_compiler::{build_project, GeneratedFile};
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
+use sqlx::Row;
 use tracing::{info, error, warn, debug};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
@@ -293,7 +294,18 @@ fn build_router(state: AppState) -> Router {
             .route("/admin/projects/:id", get(admin_project_detail_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/projects/:id/entities", post(admin_add_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/projects/:id/export", get(admin_export_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
-            .route("/admin/projects/:id/preview", get(admin_preview_project_handler).layer(from_fn_with_state(state.clone(), require_auth)));
+            .route("/admin/projects/:id/preview", get(admin_preview_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Entity field editor
+            .route("/admin/projects/:id/entities/:entity_id/fields", get(admin_entity_fields_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/entities/:entity_id/fields/add", post(admin_add_field_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/entities/:entity_id/fields/:field_name/delete", post(admin_delete_field_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Theme editor
+            .route("/admin/projects/:id/theme", get(admin_theme_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/theme/update", post(admin_theme_update_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Download project as tar.gz
+            .route("/admin/projects/:id/download", get(admin_download_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Delete entity
+            .route("/admin/projects/:id/entities/:entity_id/delete", post(admin_delete_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)));
     }
 
     // Apply rate limiting globally
@@ -2001,6 +2013,581 @@ fn escape_html(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
+}
+
+// ─── Entity Field Editor Handlers ───
+
+/// GET /admin/projects/:id/entities/:entity_id/fields — محرّر الحقول
+async fn admin_entity_fields_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path((project_id, entity_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, project_id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let entity = match project.find_entity_by_id(entity_id) {
+        Some(e) => e,
+        None => return (StatusCode::NOT_FOUND, "Entity not found").into_response(),
+    };
+
+    let fields_html = entity.fields.iter().map(|f| {
+        let type_str = match &f.field_type {
+            FieldType::Uuid => "UUID",
+            FieldType::String => "String",
+            FieldType::Text => "Text",
+            FieldType::Integer => "Integer",
+            FieldType::Decimal => "Decimal",
+            FieldType::Boolean => "Boolean",
+            FieldType::Timestamp => "Timestamp",
+            FieldType::Date => "Date",
+            FieldType::Json => "JSON",
+            FieldType::Reference => "Reference",
+        };
+        let badges = format!(
+            r#"{}{}{}{}"#,
+            if f.primary_key { r#"<span class="badge badge-yellow">PK</span> "# } else { "" },
+            if f.required { r#"<span class="badge badge-blue">مطلوب</span> "# } else { "" },
+            if f.auto_generate { r#"<span class="badge badge-green">تلقائي</span> "# } else { "" },
+            if f.display_in_list { r#"<span class="badge badge-success">قائمة</span>"# } else { "" },
+        );
+        format!(
+            r##"<tr>
+                <td><code>{}</code></td>
+                <td><span class="badge badge-blue">{}</span></td>
+                <td>{}</td>
+                <td>{}</td>
+                <td>{}</td>
+                <td class="actions">
+                    <form method="POST" action="/admin/projects/{}/entities/{}/fields/{}/delete"
+                          style="display:inline;"
+                          onsubmit="return confirm('حذف الحقل «{}»؟')">
+                        <button class="btn btn-danger btn-sm">حذف</button>
+                    </form>
+                </td>
+            </tr>"##,
+            f.name, type_str, f.label, badges,
+            f.description.as_deref().unwrap_or("—"),
+            project_id, entity_id, f.name, f.name,
+        )
+    }).collect::<String>();
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r##"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">{} {} — الحقول</h1>
+    <p class="page-subtitle">{} حقل · الجدول: <code>{}</code></p>
+    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+      <a href="/admin/projects/{}" class="btn btn-secondary">← العودة للمشروع</a>
+      <a href="/admin/projects/{}/preview" class="btn btn-primary">معاينة</a>
+      <a href="/admin/projects/{}/export" class="btn btn-secondary">تصدير</a>
+      <a href="/admin/projects/{}/download" class="btn btn-primary">📥 تحميل tar.gz</a>
+    </div>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header"><h3>➕ إضافة حقل جديد</h3></div>
+      <div class="card-body">
+        <form method="POST" action="/admin/projects/{}/entities/{}/fields/add">
+          <div class="form-row">
+            <div class="form-group">
+              <label>اسم الحقل (snake_case)</label>
+              <input type="text" name="name" required placeholder="title" pattern="[a-z][a-z0-9_]*">
+            </div>
+            <div class="form-group">
+              <label>النوع</label>
+              <select name="field_type">
+                <option value="string">String (نص قصير)</option>
+                <option value="text">Text (نص طويل)</option>
+                <option value="integer">Integer (عدد صحيح)</option>
+                <option value="decimal">Decimal (رقم عشري)</option>
+                <option value="boolean">Boolean (نعم/لا)</option>
+                <option value="timestamp">Timestamp (تاريخ ووقت)</option>
+                <option value="date">Date (تاريخ)</option>
+                <option value="json">JSON</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>التسمية (عربي)</label>
+              <input type="text" name="label" required placeholder="العنوان">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="required" value="true" checked> مطلوب (NOT NULL)
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="display_in_list" value="true" checked> يظهر في القائمة
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="display_in_form" value="true" checked> يظهر في النموذج
+              </label>
+            </div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="searchable" value="true"> قابل للبحث
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>وصف اختياري</label>
+            <input type="text" name="description" placeholder="وصف موجز للحقل">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: auto;">+ إضافة الحقل</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>الحقول الحالية</h3></div>
+      <table class="table">
+        <thead>
+          <tr><th>الاسم</th><th>النوع</th><th>التسمية</th><th>الخصائص</th><th>الوصف</th><th>إجراءات</th></tr>
+        </thead>
+        <tbody>
+          {fields}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>"##,
+        entity.icon, entity.display_name,
+        entity.fields.len(), entity.table(),
+        project_id, project_id, project_id, project_id,
+        project_id, entity_id,
+        admin_header = admin_header("محرّر الحقول", &ctx.user.email, initial),
+        fields = if fields_html.is_empty() {
+            r#"<tr><td colspan="6" style="text-align:center;opacity:0.5;padding:32px;">لا توجد حقول مخصصة.</td></tr>"#.to_string()
+        } else {
+            fields_html
+        },
+    )).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct AddFieldForm {
+    name: String,
+    field_type: String,
+    label: String,
+    required: Option<String>,
+    display_in_list: Option<String>,
+    display_in_form: Option<String>,
+    searchable: Option<String>,
+    description: Option<String>,
+}
+
+/// POST /admin/projects/:id/entities/:entity_id/fields/add — إضافة حقل
+async fn admin_add_field_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path((project_id, entity_id)): Path<(Uuid, Uuid)>,
+    Form(form): Form<AddFieldForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let mut project = match load_project(pool, project_id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    // Find the entity
+    let entity_idx = project.entities.iter().position(|e| e.id == entity_id);
+    let Some(idx) = entity_idx else {
+        return (StatusCode::NOT_FOUND, "Entity not found").into_response();
+    };
+
+    // Parse field type
+    let field_type = match form.field_type.parse::<FieldType>() {
+        Ok(t) => t,
+        Err(e) => return (StatusCode::BAD_REQUEST, format!("Invalid field type: {}", e)).into_response(),
+    };
+
+    let field = FieldConfig {
+        name: form.name,
+        field_type: field_type.clone(),
+        label: form.label,
+        primary_key: false,
+        auto_generate: false,
+        required: form.required.as_deref() == Some("true"),
+        nullable: form.required.as_deref() != Some("true"),
+        max_length: if field_type == FieldType::String { Some(255) } else { None },
+        precision: if field_type == FieldType::Decimal { Some(10) } else { None },
+        scale: if field_type == FieldType::Decimal { Some(2) } else { None },
+        default_value: None,
+        display_in_list: form.display_in_list.as_deref() == Some("true"),
+        display_in_form: form.display_in_form.as_deref() == Some("true"),
+        display_in_detail: true,
+        searchable: form.searchable.as_deref() == Some("true"),
+        sortable: true,
+        references: None,
+        description: form.description,
+    };
+
+    project.entities[idx].fields.push(field);
+
+    if let Err(e) = save_project(pool, &project).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, format!("Save error: {}", e)).into_response();
+    }
+
+    Redirect::to(&format!("/admin/projects/{}/entities/{}/fields", project_id, entity_id)).into_response()
+}
+
+/// POST /admin/projects/:id/entities/:entity_id/fields/:field_name/delete — حذف حقل
+async fn admin_delete_field_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path((project_id, entity_id, field_name)): Path<(Uuid, Uuid, String)>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let mut project = match load_project(pool, project_id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let entity_idx = project.entities.iter().position(|e| e.id == entity_id);
+    let Some(idx) = entity_idx else {
+        return (StatusCode::NOT_FOUND, "Entity not found").into_response();
+    };
+
+    // Don't delete primary key
+    if field_name == "id" || field_name == "created_at" || field_name == "updated_at" {
+        return (StatusCode::BAD_REQUEST, "Cannot delete system field").into_response();
+    }
+
+    let before = project.entities[idx].fields.len();
+    project.entities[idx].fields.retain(|f| f.name != field_name);
+    if project.entities[idx].fields.len() == before {
+        return (StatusCode::NOT_FOUND, "Field not found").into_response();
+    }
+
+    let _ = save_project(pool, &project).await;
+    Redirect::to(&format!("/admin/projects/{}/entities/{}/fields", project_id, entity_id)).into_response()
+}
+
+/// POST /admin/projects/:id/entities/:entity_id/delete — حذف كيان
+async fn admin_delete_entity_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path((project_id, entity_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let mut project = match load_project(pool, project_id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    project.remove_entity(entity_id);
+    let _ = save_project(pool, &project).await;
+    Redirect::to(&format!("/admin/projects/{}", project_id)).into_response()
+}
+
+// ─── Theme Editor Handler ───
+
+/// GET /admin/projects/:id/theme — محرّر المظهر
+async fn admin_theme_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let theme = &project.theme;
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    let css = theme.to_css();
+
+    Html(format!(
+        r##"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">🎨 محرّر المظهر</h1>
+    <p class="page-subtitle">{name}</p>
+    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+      <a href="/admin/projects/{id}" class="btn btn-secondary">← العودة للمشروع</a>
+      <a href="/admin/projects/{id}/preview" class="btn btn-primary">🔍 معاينة</a>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div class="card">
+        <div class="card-header"><h3>الإعدادات</h3></div>
+        <div class="card-body">
+          <form method="POST" action="/admin/projects/{id}/theme/update">
+            <div class="form-group">
+              <label>اللون الأساسي</label>
+              <input type="color" name="primary_color" value="{primary}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>لون الخلفية</label>
+              <input type="color" name="bg_color" value="{bg}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>لون النص</label>
+              <input type="color" name="text_color" value="{text}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>لون الأسطح (البطاقات)</label>
+              <input type="color" name="surface_color" value="{surface}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>لون النجاح</label>
+              <input type="color" name="success_color" value="{success}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>لون الخطر</label>
+              <input type="color" name="danger_color" value="{danger}" style="width:100%;height:48px;border:none;border-radius:8px;background:none;cursor:pointer;">
+            </div>
+            <div class="form-group">
+              <label>نصف قطر الزاوية</label>
+              <input type="text" name="border_radius" value="{radius}" placeholder="8px">
+            </div>
+            <div class="form-group">
+              <label>الخط</label>
+              <input type="text" name="font_family" value="{font}" placeholder="system-ui, sans-serif">
+            </div>
+            <div class="form-group">
+              <label>الاتجاه</label>
+              <select name="direction">
+                <option value="rtl" {rtl_selected}>RTL (عربي)</option>
+                <option value="ltr" {ltr_selected}>LTR (إنجليزي)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: auto;">💾 حفظ المظهر</button>
+          </form>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>معاينة حية</h3></div>
+        <div class="card-body">
+          <style>{css}</style>
+          <div style="background: var(--color-bg); color: var(--color-text); padding: 16px; border-radius: var(--radius); direction: var(--dir);">
+            <button class="btn btn-primary" style="width:auto;margin-bottom:8px;">زر أساسي</button>
+            <button class="btn btn-secondary" style="width:auto;margin-bottom:8px;">زر ثانوي</button>
+            <button class="btn btn-danger" style="width:auto;margin-bottom:8px;">زر خطر</button>
+            <table class="table">
+              <thead><tr><th>عمود</th><th>قيمة</th><th>حالة</th></tr></thead>
+              <tbody>
+                <tr><td>عنصر 1</td><td>100</td><td><span class="badge badge-success">✓</span></td></tr>
+                <tr><td>عنصر 2</td><td>200</td><td><span class="badge badge-danger">✗</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>"##,
+        admin_header = admin_header("محرّر المظهر", &ctx.user.email, initial),
+        name = project.display_name,
+        id = id,
+        primary = &theme.primary_color,
+        bg = &theme.bg_color,
+        text = &theme.text_color,
+        surface = &theme.surface_color,
+        success = &theme.success_color,
+        danger = &theme.danger_color,
+        radius = &theme.border_radius,
+        font = &theme.font_family,
+        rtl_selected = if theme.direction == "rtl" { "selected" } else { "" },
+        ltr_selected = if theme.direction == "ltr" { "selected" } else { "" },
+        css = css,
+    )).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct ThemeUpdateForm {
+    primary_color: String,
+    bg_color: String,
+    text_color: String,
+    surface_color: String,
+    success_color: String,
+    danger_color: String,
+    border_radius: String,
+    font_family: String,
+    direction: String,
+}
+
+/// POST /admin/projects/:id/theme/update — تحديث المظهر
+async fn admin_theme_update_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Form(form): Form<ThemeUpdateForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let mut project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    project.theme.primary_color = form.primary_color;
+    project.theme.bg_color = form.bg_color;
+    project.theme.text_color = form.text_color;
+    project.theme.surface_color = form.surface_color;
+    project.theme.success_color = form.success_color;
+    project.theme.danger_color = form.danger_color;
+    project.theme.border_radius = form.border_radius;
+    project.theme.font_family = form.font_family;
+    project.theme.direction = form.direction.clone();
+    project.theme.lang = if form.direction == "rtl" { "ar".to_string() } else { "en".to_string() };
+
+    let _ = save_project(pool, &project).await;
+    Redirect::to(&format!("/admin/projects/{}/theme", id)).into_response()
+}
+
+// ─── Download Project as tar.gz ───
+
+/// GET /admin/projects/:id/download — تحميل المشروع كـ tar.gz
+async fn admin_download_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let files = match build_project(&project) {
+        Ok(f) => f,
+        Err(e) => return (StatusCode::BAD_REQUEST, format!("Compile error: {}", e)).into_response(),
+    };
+
+    // إنشاء tar.gz في الذاكرة
+    use std::io::Cursor;
+    let mut tar_buffer = Cursor::new(Vec::new());
+    {
+        let mut tar_builder = tar::Builder::new(&mut tar_buffer);
+        for file in &files {
+            let mut header = tar::Header::new_gnu();
+            header.set_path(format!("{}/{}", project.dir_name(), file.path)).unwrap_or_else(|_| {});
+            header.set_size(file.content.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar_builder.append(&header, file.content.as_bytes()).unwrap_or_else(|_| {});
+        }
+        tar_builder.finish().unwrap_or_else(|_| {});
+    }
+
+    let tar_data = tar_buffer.into_inner();
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    use std::io::Write;
+    encoder.write_all(&tar_data).unwrap_or_else(|_| {});
+    let gz_data = encoder.finish().unwrap_or_default();
+
+    let filename = format!("{}.tar.gz", project.dir_name());
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "application/gzip".to_string()),
+            (axum::http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", filename)),
+        ],
+        gz_data,
+    ).into_response()
+}
+
+// ─── Helper Functions ───
+
+async fn load_project(pool: &PgPool, id: Uuid) -> Option<ProjectConfig> {
+    let row = sqlx::query("SELECT config FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()?;
+
+    let row = row?;
+    let config_json: String = row.try_get("config").ok()?;
+    ProjectConfig::from_json(&config_json).ok()
+}
+
+async fn save_project(pool: &PgPool, project: &ProjectConfig) -> Result<(), String> {
+    let config_json = project.to_json().map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE novax_projects SET config = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&config_json)
+        .bind(project.id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ─── Types ───
