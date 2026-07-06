@@ -22,7 +22,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.88"
 license = "Apache-2.0 OR MIT"
@@ -34,23 +34,23 @@ readme = "README.md"
 
 [workspace.dependencies]
 # Internal crates
-novax = { path = "crates/novax", version = "0.8.0" }
-novax-macros = { path = "crates/novax-macros", version = "0.8.0" }
-novax-runtime = { path = "crates/novax-runtime", version = "0.8.0" }
-novax-router = { path = "crates/novax-router", version = "0.8.0" }
-novax-network = { path = "crates/novax-network", version = "0.8.0" }
-novax-storage = { path = "crates/novax-storage", version = "0.8.0" }
-novax-observability = { path = "crates/novax-observability", version = "0.8.0" }
-novax-orm = { path = "crates/novax-orm", version = "0.8.0" }
-novax-migrate = { path = "crates/novax-migrate", version = "0.8.0" }
-novax-auth = { path = "crates/novax-auth", version = "0.8.0" }
-novax-rate-limit = { path = "crates/novax-rate-limit", version = "0.8.0" }
-novax-web = { path = "crates/novax-web", version = "0.8.0" }
-novax-mail = { path = "crates/novax-mail", version = "0.8.0" }
-novax-seo = { path = "crates/novax-seo", version = "0.8.0" }
-novax-core = { path = "crates/novax-core", version = "0.8.0" }
-novax-compiler = { path = "crates/novax-compiler", version = "0.8.0" }
-novax-cli = { path = "crates/novax-cli", version = "0.8.0" }
+novax = { path = "crates/novax", version = "0.9.0" }
+novax-macros = { path = "crates/novax-macros", version = "0.9.0" }
+novax-runtime = { path = "crates/novax-runtime", version = "0.9.0" }
+novax-router = { path = "crates/novax-router", version = "0.9.0" }
+novax-network = { path = "crates/novax-network", version = "0.9.0" }
+novax-storage = { path = "crates/novax-storage", version = "0.9.0" }
+novax-observability = { path = "crates/novax-observability", version = "0.9.0" }
+novax-orm = { path = "crates/novax-orm", version = "0.9.0" }
+novax-migrate = { path = "crates/novax-migrate", version = "0.9.0" }
+novax-auth = { path = "crates/novax-auth", version = "0.9.0" }
+novax-rate-limit = { path = "crates/novax-rate-limit", version = "0.9.0" }
+novax-web = { path = "crates/novax-web", version = "0.9.0" }
+novax-mail = { path = "crates/novax-mail", version = "0.9.0" }
+novax-seo = { path = "crates/novax-seo", version = "0.9.0" }
+novax-core = { path = "crates/novax-core", version = "0.9.0" }
+novax-compiler = { path = "crates/novax-compiler", version = "0.9.0" }
+novax-cli = { path = "crates/novax-cli", version = "0.9.0" }
 
 # External (justified dependencies — kept minimal)
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }

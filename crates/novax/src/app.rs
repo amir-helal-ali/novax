@@ -421,9 +421,11 @@ fn require_admin(ctx: &AuthContext) -> Result<(), Response> {
 
 async fn dashboard_root(State(state): State<AppState>) -> Response {
     if state.db.is_some() && state.auth.is_some() {
-        Redirect::to("/auth/login").into_response()
+        // إذا كان المستخدم مسجل دخول (عنده cookie)، وجهه لـ /admin
+        // وإلا وجهه لصفحة الهبوط الجميلة
+        Html(novax_web::landing_page()).into_response()
     } else {
-        Html(LANDING_PAGE.to_string()).into_response()
+        Html(novax_web::landing_page()).into_response()
     }
 }
 
@@ -1085,28 +1087,115 @@ async fn admin_dashboard_handler(
     let active: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_active = TRUE").fetch_one(pool).await.unwrap_or((0,));
     let admins: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_admin = TRUE").fetch_one(pool).await.unwrap_or((0,));
 
+    // Project stats
+    let projects_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM novax_projects").fetch_one(pool).await.unwrap_or((0,));
+
     // Recent users (5)
     let recent: Vec<UserRow> = sqlx::query_as("SELECT id, email, name, is_active, is_admin, email_verified_at, created_at FROM users ORDER BY created_at DESC LIMIT 5")
         .fetch_all(pool).await.unwrap_or_default();
 
-    let recent_rows = recent.iter().map(|u| {
+    let recent_rows: String = recent.iter().map(|u| {
         let status_badge = if u.is_active { r#"<span class="badge badge-green">نشط</span>"# } else { r#"<span class="badge badge-red">موقوف</span>"# };
         format!(
             r#"<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>"#,
             u.name, u.email, status_badge, u.created_at.format("%Y-%m-%d %H:%M")
         )
-    }).collect::<String>();
+    }).collect();
 
     let stats = DashboardStats {
         total_users: total.0,
         verified_users: verified.0,
         active_users: active.0,
         admin_users: admins.0,
-        recent_users_rows: recent_rows,
+        recent_users_rows: recent_rows.clone(),
     };
 
     let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
-    Html(admin_dashboard(&ctx.user.email, initial, &stats)).into_response()
+    let uptime = state.start_time.elapsed().as_secs();
+
+    Html(format!(
+        r##"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin" class="active"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/profile"><span class="icon">👤</span> ملفي</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">مرحباً، {} 👋</h1>
+    <p class="page-subtitle">إليك نظرة عامة على منصة Novax — وقت التشغيل: {}</p>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">👥 إجمالي المستخدمين</div>
+        <div class="stat-value">{}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">✅ بريد مُحقَّق</div>
+        <div class="stat-value">{}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">🟢 مستخدمون نشطون</div>
+        <div class="stat-value">{}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">🔑 مسؤولون</div>
+        <div class="stat-value">{}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">📦 مشاريع</div>
+        <div class="stat-value">{}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">⏱️ وقت التشغيل</div>
+        <div class="stat-value">{}m</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+      <div class="card">
+        <div class="card-header">
+          <h3>أحدث المستخدمين</h3>
+          <a href="/admin/users">عرض الكل ←</a>
+        </div>
+        <table>
+          <thead><tr><th>الاسم</th><th>البريد</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+          <tbody>{recent}</tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>إجراءات سريعة</h3></div>
+        <div class="card-body" style="display: flex; flex-direction: column; gap: 12px;">
+          <a href="/admin/projects" class="btn btn-primary" style="width: auto;">📦 إنشاء مشروع جديد</a>
+          <a href="/admin/users" class="btn btn-secondary" style="width: auto;">👥 إدارة المستخدمين</a>
+          <a href="/profile" class="btn btn-secondary" style="width: auto;">👤 ملفي الشخصي</a>
+          <a href="/admin/settings" class="btn btn-secondary" style="width: auto;">⚙️ إعدادات المنصة</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>"##,
+        ctx.user.name,
+        format_uptime(uptime),
+        total.0, verified.0, active.0, admins.0,
+        projects_count.0,
+        uptime / 60,
+        admin_header = admin_header("لوحة التحكم", &ctx.user.email, initial),
+        recent = if recent_rows.is_empty() {
+            r#"<tr><td colspan="4" style="text-align:center;opacity:0.5;padding:24px;">لا يوجد مستخدمون بعد</td></tr>"#.to_string()
+        } else {
+            recent_rows
+        },
+    )).into_response()
+}
+
+fn format_uptime(secs: u64) -> String {
+    if secs < 60 { format!("{}s", secs) }
+    else if secs < 3600 { format!("{}m {}s", secs / 60, secs % 60) }
+    else { format!("{}h {}m", secs / 3600, (secs % 3600) / 60) }
 }
 
 async fn admin_users_handler(

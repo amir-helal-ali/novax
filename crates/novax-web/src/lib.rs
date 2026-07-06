@@ -5,5 +5,7 @@
 
 pub mod templates;
 pub mod render;
+pub mod landing;
 
 pub use render::*;
+pub use landing::landing_page;
