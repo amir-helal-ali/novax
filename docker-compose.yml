@@ -14,7 +14,7 @@ services:
     image: novax-app:latest
     container_name: novax-app
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - RUST_LOG=info
       - HOST=0.0.0.0
