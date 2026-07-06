@@ -13,12 +13,14 @@ pub mod entity;
 pub mod field;
 pub mod field_config;
 pub mod project;
+pub mod templates;
 pub mod theme;
 
 pub use entity::*;
 pub use field::*;
 pub use field_config::*;
 pub use project::*;
+pub use templates::*;
 pub use theme::*;
 
 use thiserror::Error;

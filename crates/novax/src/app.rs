@@ -31,7 +31,7 @@ use novax_rate_limit::{RateLimiter, RateLimitConfig, spawn_cleanup_task};
 use novax_router::{RouterConfig, with_defaults};
 use novax_seo::{generate_robots_txt, generate_sitemap, generate_manifest, default_sitemap, SeoConfig};
 use novax_web::render::*;
-use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfig};
+use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfig, get_template, list_templates};
 use novax_compiler::{build_project, GeneratedFile, generate_openapi_spec, generate_swagger_ui};
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
@@ -291,6 +291,7 @@ fn build_router(state: AppState) -> Router {
         // ─── Novax Engine: Project Management (admin only) ───
         router = router
             .route("/admin/projects", get(admin_projects_handler).post(admin_create_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/from-template/:template", post(admin_create_from_template_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/projects/:id", get(admin_project_detail_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/projects/:id/entities", post(admin_add_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             .route("/admin/projects/:id/export", get(admin_export_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
@@ -1645,6 +1646,13 @@ async fn admin_projects_handler(
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header"><h3>⚡ قوالب جاهزة</h3></div>
+      <div class="card-body" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        {templates}
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header"><h3>المشاريع الحالية</h3></div>
       <table class="table">
@@ -1659,12 +1667,33 @@ async fn admin_projects_handler(
   </div>
 </div>"#,
         admin_header = admin_header("المشاريع", &ctx.user.email, initial),
+        templates = render_template_cards(),
         rows = if rows.is_empty() {
             r#"<tr><td colspan="5" style="text-align: center; opacity: 0.5; padding: 32px;">لا توجد مشاريع بعد. أنشئ أول مشروع أعلاه.</td></tr>"#.to_string()
         } else {
             rows
         },
     )).into_response()
+}
+
+/// توليد HTML لبطاقات القوالب الجاهزة
+fn render_template_cards() -> String {
+    list_templates().iter().map(|(id, name, desc)| {
+        format!(
+            r##"<div style="border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center;">
+              <div style="font-size: 32px; margin-bottom: 8px;">{}</div>
+              <h4 style="margin-bottom: 4px;">{}</h4>
+              <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">{}</p>
+              <form method="POST" action="/admin/projects/from-template/{}">
+                <button type="submit" class="btn btn-primary" style="width: auto;">+ إنشاء من هذا القالب</button>
+              </form>
+            </div>"##,
+            name.chars().take(2).collect::<String>(),
+            name,
+            desc,
+            id,
+        )
+    }).collect::<String>()
 }
 
 #[derive(Debug, Deserialize)]
@@ -2659,6 +2688,57 @@ async fn admin_download_project_handler(
         ],
         gz_data,
     ).into_response()
+}
+
+// ─── Project Template Handler ───
+
+/// POST /admin/projects/from-template/:template — إنشاء مشروع من قالب جاهز
+async fn admin_create_from_template_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(template_name): Path<String>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let mut project = match get_template(&template_name) {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Template not found").into_response(),
+    };
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let config_json = match project.to_json() {
+        Ok(j) => j,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("JSON error: {}", e)).into_response(),
+    };
+
+    let result = sqlx::query(
+        "INSERT INTO novax_projects (id, name, display_name, description, config) VALUES ($1, $2, $3, $4, $5)"
+    )
+    .bind(project.id)
+    .bind(&project.name)
+    .bind(&project.display_name)
+    .bind(&project.description)
+    .bind(&config_json)
+    .execute(pool)
+    .await;
+
+    match result {
+        Ok(_) => Redirect::to(&format!("/admin/projects/{}", project.id)).into_response(),
+        Err(e) => {
+            let msg = if e.to_string().contains("unique") {
+                "اسم المشروع موجود بالفعل"
+            } else {
+                "حدث خطأ أثناء الإنشاء"
+            };
+            (StatusCode::BAD_REQUEST, msg).into_response()
+        }
+    }
 }
 
 // ─── Twin-Links: API Inspector Handlers ───
