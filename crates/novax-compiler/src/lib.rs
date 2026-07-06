@@ -13,11 +13,13 @@ pub mod rust_codegen;
 pub mod html_codegen;
 pub mod sql_codegen;
 pub mod project_builder;
+pub mod openapi_codegen;
 
 pub use rust_codegen::*;
 pub use html_codegen::*;
 pub use sql_codegen::*;
 pub use project_builder::*;
+pub use openapi_codegen::*;
 
 use thiserror::Error;
 

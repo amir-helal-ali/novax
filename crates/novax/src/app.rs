@@ -32,7 +32,7 @@ use novax_router::{RouterConfig, with_defaults};
 use novax_seo::{generate_robots_txt, generate_sitemap, generate_manifest, default_sitemap, SeoConfig};
 use novax_web::render::*;
 use novax_core::{ProjectConfig, EntityConfig, FieldConfig, FieldType, ThemeConfig};
-use novax_compiler::{build_project, GeneratedFile};
+use novax_compiler::{build_project, GeneratedFile, generate_openapi_spec, generate_swagger_ui};
 use serde::{Serialize, Deserialize};
 use sqlx::PgPool;
 use sqlx::Row;
@@ -305,7 +305,14 @@ fn build_router(state: AppState) -> Router {
             // Download project as tar.gz
             .route("/admin/projects/:id/download", get(admin_download_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
             // Delete entity
-            .route("/admin/projects/:id/entities/:entity_id/delete", post(admin_delete_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)));
+            .route("/admin/projects/:id/entities/:entity_id/delete", post(admin_delete_entity_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Twin-Links: API Inspector (Swagger UI + OpenAPI JSON)
+            .route("/admin/projects/:id/api-docs", get(admin_swagger_ui_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/api-spec.json", get(admin_openapi_spec_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            // Project settings (edit/delete project)
+            .route("/admin/projects/:id/settings", get(admin_project_settings_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/delete", post(admin_delete_project_handler).layer(from_fn_with_state(state.clone(), require_auth)))
+            .route("/admin/projects/:id/update", post(admin_update_project_handler).layer(from_fn_with_state(state.clone(), require_auth)));
     }
 
     // Apply rate limiting globally
@@ -2563,6 +2570,211 @@ async fn admin_download_project_handler(
         ],
         gz_data,
     ).into_response()
+}
+
+// ─── Twin-Links: API Inspector Handlers ───
+
+/// GET /admin/projects/:id/api-docs — Swagger UI
+async fn admin_swagger_ui_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let spec = generate_openapi_spec(&project);
+    let html = generate_swagger_ui(&spec);
+    Html(html).into_response()
+}
+
+/// GET /admin/projects/:id/api-spec.json — OpenAPI JSON spec
+async fn admin_openapi_spec_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let spec = generate_openapi_spec(&project);
+    Json(spec).into_response()
+}
+
+// ─── Project Settings Handlers ───
+
+/// GET /admin/projects/:id/settings — إعدادات المشروع (تعديل/حذف)
+async fn admin_project_settings_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    let initial = ctx.user.name.chars().next().unwrap_or('U').to_uppercase().next().unwrap_or('U');
+    Html(format!(
+        r##"{admin_header}
+<div class="admin-body">
+  <div class="admin-sidebar">
+    <a href="/admin"><span class="icon">📊</span> لوحة التحكم</a>
+    <a href="/admin/users"><span class="icon">👥</span> المستخدمون</a>
+    <a href="/admin/projects" class="active"><span class="icon">📦</span> المشاريع</a>
+    <a href="/admin/settings"><span class="icon">⚙️</span> الإعدادات</a>
+    <a href="/auth/logout"><span class="icon">🚪</span> خروج</a>
+  </div>
+  <div class="admin-content">
+    <h1 class="page-title">⚙️ إعدادات المشروع</h1>
+    <p class="page-subtitle">{name}</p>
+
+    <div class="card" style="margin-bottom: 24px;">
+      <div class="card-header"><h3>تعديل بيانات المشروع</h3></div>
+      <div class="card-body">
+        <form method="POST" action="/admin/projects/{id}/update">
+          <div class="form-row">
+            <div class="form-group">
+              <label>الاسم (PascalCase)</label>
+              <input type="text" name="name" value="{proj_name}" required pattern="[A-Z][a-zA-Z0-9]*">
+            </div>
+            <div class="form-group">
+              <label>الاسم المعروض</label>
+              <input type="text" name="display_name" value="{display_name}" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>الوصف</label>
+            <textarea name="description" rows="2">{desc}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: auto;">💾 حفظ</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card" style="border-color: var(--red);">
+      <div class="card-header" style="color: var(--red);"><h3>⚠️ منطقة الخطر</h3></div>
+      <div class="card-body">
+        <p style="margin-bottom: 16px;">حذف المشروع سيحذف كل الكيانات والإعدادات. لا يمكن التراجع.</p>
+        <form method="POST" action="/admin/projects/{id}/delete"
+              onsubmit="return confirm('⚠️ هل أنت متأكد؟ سيُحذف المشروع بالكامل!')">
+          <button type="submit" class="btn btn-danger" style="width: auto;">🗑️ حذف المشروع نهائيًا</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>"##,
+        admin_header = admin_header("إعدادات المشروع", &ctx.user.email, initial),
+        name = project.display_name,
+        id = id,
+        proj_name = project.name,
+        display_name = project.display_name,
+        desc = project.description.as_deref().unwrap_or(""),
+    )).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateProjectForm {
+    name: String,
+    display_name: String,
+    description: Option<String>,
+}
+
+/// POST /admin/projects/:id/update — تحديث بيانات المشروع
+async fn admin_update_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Form(form): Form<UpdateProjectForm>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let mut project = match load_project(pool, id).await {
+        Some(p) => p,
+        None => return (StatusCode::NOT_FOUND, "Project not found").into_response(),
+    };
+
+    project.name = form.name;
+    project.display_name = form.display_name;
+    project.description = form.description;
+    project.updated_at = chrono::Utc::now();
+
+    let config_json = match project.to_json() {
+        Ok(j) => j,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("JSON error: {}", e)).into_response(),
+    };
+
+    let _ = sqlx::query("UPDATE novax_projects SET name = $1, display_name = $2, description = $3, config = $4, updated_at = NOW() WHERE id = $5")
+        .bind(&project.name)
+        .bind(&project.display_name)
+        .bind(&project.description)
+        .bind(&config_json)
+        .bind(id)
+        .execute(pool)
+        .await;
+
+    Redirect::to(&format!("/admin/projects/{}", id)).into_response()
+}
+
+/// POST /admin/projects/:id/delete — حذف المشروع نهائيًا
+async fn admin_delete_project_handler(
+    axum::Extension(ctx): axum::Extension<AuthContext>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(r) = require_admin(&ctx) {
+        return r;
+    }
+
+    let pool = match state.db.as_ref() {
+        Some(p) => p,
+        None => return (StatusCode::SERVICE_UNAVAILABLE, "DB unavailable").into_response(),
+    };
+
+    let _ = sqlx::query("DELETE FROM novax_projects WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await;
+
+    Redirect::to("/admin/projects").into_response()
 }
 
 // ─── Helper Functions ───
